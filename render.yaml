@@ -27,5 +27,9 @@ services:
         sync: false
       - key: FOOTBALL_API_BASE_URL
         sync: false
-      - key: FOOTBALL_SCORE_POLL_MS
-        value: 300000
+      - key: FOOTBALL_SCORE_IDLE_POLL_MS
+        value: 1800000
+      - key: FOOTBALL_SCORE_LIVE_POLL_MS
+        value: 60000
+      - key: FOOTBALL_API_DAILY_LIMIT
+        value: 90

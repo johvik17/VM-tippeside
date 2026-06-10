@@ -24,7 +24,7 @@ Backend køyrer på `http://localhost:4000`.
 Backenden krev `DATABASE_URL`. Bruk Supabase connection string, eller ein lokal
 PostgreSQL-database dersom du vil teste utan Supabase.
 
-## Automatisk resultatoppdatering
+## Automatisk Resultatoppdatering
 
 Backenden kan hente kampstatus og resultat frå ein fotball-API-provider. API-nøkkel
 skal berre ligge på backend, aldri i frontend.
@@ -35,12 +35,22 @@ Miljøvariablar:
 FOOTBALL_API_PROVIDER=api-football
 FOOTBALL_API_KEY=your-football-api-key
 FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
-FOOTBALL_SCORE_POLL_MS=300000
+FOOTBALL_SCORE_IDLE_POLL_MS=1800000
+FOOTBALL_SCORE_LIVE_POLL_MS=60000
+FOOTBALL_API_DAILY_LIMIT=90
 ```
 
-Polling skjer kvart femte minutt som standard. Dersom desse variablane manglar,
-starter serveren utan automatisk score-sync og admin kan framleis legge inn
-resultat manuelt.
+Score-jobben held seg innanfor gratisnivå:
+
+- Ingen API-kall dersom det ikkje er lokale kampar i dag.
+- Dersom det er kampar i dag, men ingen er live: polling kvart 30. minutt.
+- Dersom minst éin kamp er live: polling kvart 60. sekund.
+- Når alle dagens kampar er ferdige, går jobben tilbake til idle polling.
+- API-kall blir stoppa når `FOOTBALL_API_DAILY_LIMIT` er nådd.
+- API-et blir berre kalla for dagens dato.
+
+`FOOTBALL_API_BASE_URL` kan anten vere ein vanleg URL, der jobben legg til
+`date=YYYY-MM-DD`, eller innehalde `{date}` som blir erstatta direkte.
 
 Støtta provider-modusar:
 
@@ -54,6 +64,7 @@ Fixtures blir matchet mot lokale kampar slik:
 2. Dato + heimelag + bortelag dersom kampnummer manglar.
 
 Når ein kamp blir `FINISHED`, blir poenga for kampen rekna ut automatisk.
+Admin kan framleis legge inn resultat manuelt som fallback.
 
 ## Testbrukarar
 
@@ -107,7 +118,9 @@ SEED_DEMO_PASSWORD=vel-eit-sterkt-passord
 FOOTBALL_API_PROVIDER=api-football
 FOOTBALL_API_KEY=din-api-nokkel
 FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
-FOOTBALL_SCORE_POLL_MS=300000
+FOOTBALL_SCORE_IDLE_POLL_MS=1800000
+FOOTBALL_SCORE_LIVE_POLL_MS=60000
+FOOTBALL_API_DAILY_LIMIT=90
 ```
 
 Når Render er deploya, test:
@@ -149,7 +162,7 @@ Frontend-URL:
 https://johvik17.github.io/VM-tippeside/
 ```
 
-## Funksjonar i MVP
+## Funksjonar I MVP
 
 - Registrering og innlogging
 - Kampoversikt med tipseskjema

@@ -1,12 +1,18 @@
 import { many, query, recalculateMatchPoints } from "./db.js";
 
-const FIVE_MINUTES = 5 * 60 * 1000;
+const ONE_MINUTE = 60 * 1000;
+const THIRTY_MINUTES = 30 * 60 * 1000;
 const provider = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase();
 const apiKey = process.env.FOOTBALL_API_KEY?.trim();
 const baseUrl = process.env.FOOTBALL_API_BASE_URL?.trim();
-const pollIntervalMs = Number(process.env.FOOTBALL_SCORE_POLL_MS ?? FIVE_MINUTES);
+const livePollMs = Number(process.env.FOOTBALL_SCORE_LIVE_POLL_MS ?? ONE_MINUTE);
+const idlePollMs = Number(process.env.FOOTBALL_SCORE_IDLE_POLL_MS ?? THIRTY_MINUTES);
+const dailyRequestLimit = Number(process.env.FOOTBALL_API_DAILY_LIMIT ?? 90);
 
 let syncInProgress = false;
+let timeoutId = null;
+let requestCount = 0;
+let requestCountDate = currentDate();
 
 export function startScorePolling() {
   if (!provider || !apiKey || !baseUrl) {
@@ -14,44 +20,93 @@ export function startScorePolling() {
     return;
   }
 
-  console.log(`[scores] Starting ${provider} score polling every ${Math.round(pollIntervalMs / 1000)} seconds.`);
-  syncScores().catch((error) => console.error("[scores] Initial score sync failed:", error));
-  setInterval(() => {
-    syncScores().catch((error) => console.error("[scores] Score sync failed:", error));
-  }, pollIntervalMs);
+  console.log(
+    `[scores] Starting ${provider} score polling. idle=${Math.round(idlePollMs / 1000)}s live=${Math.round(
+      livePollMs / 1000
+    )}s dailyLimit=${dailyRequestLimit}.`
+  );
+
+  scheduleNextSync(0);
 }
 
 export async function syncScores() {
   if (syncInProgress) {
     console.log("[scores] Previous sync still running, skipping this tick.");
+    scheduleNextSync(idlePollMs);
     return;
   }
 
   syncInProgress = true;
   try {
-    const [localMatches, apiFixtures] = await Promise.all([loadLocalMatches(), fetchFixtures()]);
-    const updates = matchFixtures(localMatches, apiFixtures);
+    resetDailyCounterIfNeeded();
 
-    console.log(`[scores] Fetched ${apiFixtures.length} fixtures, matched ${updates.length} local matches.`);
+    const today = currentDate();
+    const localMatches = await loadLocalMatchesForDate(today);
+
+    if (localMatches.length === 0) {
+      console.log("[scores] no matches today");
+      scheduleNextSync(idlePollMs);
+      return;
+    }
+
+    if (requestCount >= dailyRequestLimit) {
+      console.log(`[scores] daily request limit reached (${requestCount}/${dailyRequestLimit}), skipping API call.`);
+      scheduleNextSync(idlePollMs);
+      return;
+    }
+
+    const hasLiveBeforeFetch = localMatches.some((match) => match.status === "LIVE");
+    console.log(hasLiveBeforeFetch ? "[scores] live polling" : "[scores] idle polling");
+
+    const apiFixtures = await fetchFixtures(today);
+    requestCount += 1;
+
+    const updates = matchFixtures(localMatches, apiFixtures);
+    console.log(
+      `[scores] Fetched ${apiFixtures.length} fixtures for ${today}, matched ${updates.length} local matches. Requests today: ${requestCount}/${dailyRequestLimit}.`
+    );
 
     for (const { match, fixture } of updates) {
       await updateMatchFromFixture(match, fixture);
     }
+
+    const latestTodayMatches = await loadLocalMatchesForDate(today);
+    const hasLiveAfterFetch = latestTodayMatches.some((match) => match.status === "LIVE");
+    const allFinished = latestTodayMatches.every((match) => match.status === "FINISHED");
+
+    if (hasLiveAfterFetch && !allFinished && requestCount < dailyRequestLimit) {
+      scheduleNextSync(livePollMs);
+      return;
+    }
+
+    scheduleNextSync(idlePollMs);
+  } catch (error) {
+    console.error("[scores] Score sync failed:", error);
+    scheduleNextSync(idlePollMs);
   } finally {
     syncInProgress = false;
   }
 }
 
-async function loadLocalMatches() {
+function scheduleNextSync(delayMs) {
+  if (timeoutId) clearTimeout(timeoutId);
+  timeoutId = setTimeout(() => {
+    syncScores().catch((error) => console.error("[scores] Score sync failed:", error));
+  }, delayMs);
+}
+
+async function loadLocalMatchesForDate(date) {
   return many(
     `SELECT id, match_number, home_team, away_team, match_date, start_time, home_score, away_score, status
      FROM matches
-     ORDER BY start_time ASC`
+     WHERE match_date = $1
+     ORDER BY start_time ASC`,
+    [date]
   );
 }
 
-async function fetchFixtures() {
-  const response = await fetch(baseUrl, {
+async function fetchFixtures(date) {
+  const response = await fetch(buildFixtureUrl(date), {
     headers: buildHeaders()
   });
 
@@ -62,6 +117,21 @@ async function fetchFixtures() {
 
   const data = await response.json();
   return normalizeFixtures(data);
+}
+
+function buildFixtureUrl(date) {
+  if (baseUrl.includes("{date}")) {
+    return baseUrl.replaceAll("{date}", date);
+  }
+
+  const url = new URL(baseUrl);
+  if (provider === "football-data" || provider === "football-data.org") {
+    url.searchParams.set("dateFrom", date);
+    url.searchParams.set("dateTo", date);
+  } else {
+    url.searchParams.set("date", date);
+  }
+  return url.toString();
 }
 
 function buildHeaders() {
@@ -167,6 +237,18 @@ async function updateMatchFromFixture(match, fixture) {
     await recalculateMatchPoints(match.id);
     console.log(`[scores] Recalculated prediction points for match #${match.match_number ?? match.id}.`);
   }
+}
+
+function resetDailyCounterIfNeeded() {
+  const today = currentDate();
+  if (requestCountDate !== today) {
+    requestCount = 0;
+    requestCountDate = today;
+  }
+}
+
+function currentDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function readMatchNumber(fixture) {
