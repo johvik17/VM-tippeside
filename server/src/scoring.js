@@ -10,7 +10,7 @@ export function calculatePredictionPoints(prediction, match) {
   }
 
   const actualOutcome = outcomeFromScore(match.home_score, match.away_score);
-  const outcomePoints = prediction.outcome === actualOutcome ? 3 : 0;
+  const outcomePoints = prediction.outcome === actualOutcome ? 1 : 0;
 
   const exactPoints =
     prediction.predicted_home_goals === match.home_score &&

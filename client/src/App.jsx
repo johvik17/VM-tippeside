@@ -717,9 +717,9 @@ function FriendsPanel() {
       <section className="info-section">
         <h3>🏆 Poenggivning</h3>
         <ul>
-          <li><strong>3 poeng</strong> - Riktig utfall (1, X eller 2)</li>
+          <li><strong>1 poeng</strong> - Riktig utfall (1, X eller 2)</li>
           <li><strong>2 poeng</strong> - Eksakt resultat (f.eks. 2-1)</li>
-          <li><strong>5 poeng total</strong> - Perfekt tips (både utfall og resultat korrekt)</li>
+          <li><strong>3 poeng total</strong> - Perfekt tips (både utfall og resultat korrekt)</li>
         </ul>
       </section>
 
