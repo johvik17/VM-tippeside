@@ -9,11 +9,15 @@
     "dev:client": "npm run dev --workspace client",
     "start": "npm run start --workspace server",
     "build": "npm run build --workspace client",
+    "build:pages": "npm run build && node scripts/prepare-gh-pages.mjs",
+    "deploy": "npm run build:pages && gh-pages -d client/dist",
     "lint": "npm run lint --workspace client"
   },
   "workspaces": [
     "client",
     "server"
   ],
-  "devDependencies": {}
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
+  }
 }

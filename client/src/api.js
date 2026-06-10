@@ -1,6 +1,14 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:4000/api"
+    : "");
 
 export async function apiRequest(path, options = {}) {
+  if (!API_URL) {
+    throw new Error("API-adresse manglar. Set VITE_API_URL til URL-en for backend.");
+  }
+
   const token = localStorage.getItem("vmTippeToken");
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
