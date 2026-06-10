@@ -45,8 +45,6 @@ const teamFlagCodes = {
   "Congo DR": "CD",
   Croatia: "HR",
   "Curaçao": "CW",
-  "CuraÃ§ao": "CW",
-  "CuraÃƒÂ§ao": "CW",
   Czechia: "CZ",
   Ecuador: "EC",
   Egypt: "EG",
@@ -79,8 +77,6 @@ const teamFlagCodes = {
   Switzerland: "CH",
   Tunisia: "TN",
   "Türkiye": "TR",
-  "TÃ¼rkiye": "TR",
-  "TÃƒÂ¼rkiye": "TR",
   Uruguay: "UY",
   USA: "US",
   Uzbekistan: "UZ"
@@ -422,7 +418,7 @@ function MatchCard({ match, prediction, onSaved, onError }) {
   const isLocked = match.isLocked;
   const isFinished = match.status === "FINISHED";
   const isLive = isLiveMatch(match);
-  const statusLabel = isFinished ? "Ferdig" : isLive ? "Live" : isLocked ? "LÃ¥st" : "Ã…pen";
+  const statusLabel = isFinished ? "Ferdig" : isLive ? "Live" : isLocked ? "Låst" : "Åpen";
   const statusClass = isFinished ? "done" : isLive ? "live" : isLocked ? "locked" : "open";
 
   useEffect(() => {
@@ -476,7 +472,7 @@ function MatchCard({ match, prediction, onSaved, onError }) {
   return (
     <article className={`match-card ${prediction?.points === 5 ? "perfect-score" : ""}`}>
       <div className="match-card-top">
-        <span>#{match.matchNumber} Â· Gruppe {match.groupName || "VM"}</span>
+        <span>#{match.matchNumber} - Gruppe {match.groupName || "VM"}</span>
         <span className={`status-pill ${statusClass}`}>{statusLabel}</span>
       </div>
 
@@ -508,7 +504,7 @@ function MatchCard({ match, prediction, onSaved, onError }) {
 
       {prediction && (
         <p className="own-prediction">
-          Ditt tips: {outcomeLabel(prediction.outcome)} Â· {prediction.predictedHomeGoals}-{prediction.predictedAwayGoals}
+          Ditt tips: {outcomeLabel(prediction.outcome)} - {prediction.predictedHomeGoals}-{prediction.predictedAwayGoals}
         </p>
       )}
 
@@ -621,7 +617,7 @@ function Leaderboard({ rows }) {
         <div className="bonus-card">
           <Sparkles size={18} />
           <span>Flest bonuspoeng</span>
-          <strong>{bestBonus?.username ?? "-"} Â· {bestBonus?.bonusPoints ?? 0}</strong>
+          <strong>{bestBonus?.username ?? "-"} - {bestBonus?.bonusPoints ?? 0}</strong>
         </div>
       </section>
 
@@ -696,7 +692,7 @@ function MyTips({ matches, predictionsByMatch }) {
                   <td>{formatNorwegianKickoff(match)}</td>
                   <td>{outcomeLabel(prediction.outcome)}</td>
                   <td>{prediction.predictedHomeGoals}-{prediction.predictedAwayGoals}</td>
-                  <td>{match.isLocked ? "LÃ¥st" : "Ã…pen"}</td>
+                  <td>{match.isLocked ? "Låst" : "Åpen"}</td>
                 </tr>
               );
             })}
@@ -713,7 +709,7 @@ function FriendsPanel() {
       <Users size={34} />
       <p className="eyebrow">Venner</p>
       <h2>Privat liga kommer her</h2>
-      <p className="muted">Designet er klart for venneligaer, invitasjonskode og smÃ¥ rivaliseringer. Funksjonen kan kobles pÃ¥ uten Ã¥ endre tippingflyten.</p>
+      <p className="muted">Designet er klart for venneligaer, invitasjonskode og små rivaliseringer. Funksjonen kan kobles på uten å endre tippingflyten.</p>
     </main>
   );
 }
@@ -867,3 +863,4 @@ function isLiveMatch(match) {
   const now = Date.now();
   return now >= kickoff && now <= kickoff + 2 * 60 * 60 * 1000 && match.status !== "FINISHED";
 }
+
