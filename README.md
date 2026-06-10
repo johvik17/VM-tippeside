@@ -34,6 +34,8 @@ Miljøvariablar:
 ```bash
 FOOTBALL_API_PROVIDER=api-football
 FOOTBALL_API_KEY=your-football-api-key
+FOOTBALL_API_COMPETITION_ID=1
+FOOTBALL_API_SEASON=2026
 FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
 FOOTBALL_SCORE_IDLE_POLL_MS=1800000
 FOOTBALL_SCORE_LIVE_POLL_MS=60000
@@ -48,9 +50,18 @@ Score-jobben held seg innanfor gratisnivå:
 - Når alle dagens kampar er ferdige, går jobben tilbake til idle polling.
 - API-kall blir stoppa når `FOOTBALL_API_DAILY_LIMIT` er nådd.
 - API-et blir berre kalla for dagens dato.
+- API-kall blir filtrert til FIFA World Cup-konkurransen med
+  `FOOTBALL_API_COMPETITION_ID` og `FOOTBALL_API_SEASON`.
+- Fixtures blir filtrert på konkurranse før dei blir matchet mot lokale kampar.
 
-`FOOTBALL_API_BASE_URL` kan anten vere ein vanleg URL, der jobben legg til
-`date=YYYY-MM-DD`, eller innehalde `{date}` som blir erstatta direkte.
+`FOOTBALL_API_BASE_URL` kan anten vere ein vanleg URL, der jobben legg til dato
+og konkurransefilter, eller innehalde `{date}`, `{competitionId}` og `{season}`
+som blir erstatta direkte.
+
+Vanlege konkurranseverdiar:
+
+- API-Football / API-Sports: FIFA World Cup brukar league id `1`.
+- Football-Data.org: FIFA World Cup brukar competition code `WC`.
 
 Støtta provider-modusar:
 
@@ -117,6 +128,8 @@ SEED_ADMIN_PASSWORD=vel-eit-sterkt-passord
 SEED_DEMO_PASSWORD=vel-eit-sterkt-passord
 FOOTBALL_API_PROVIDER=api-football
 FOOTBALL_API_KEY=din-api-nokkel
+FOOTBALL_API_COMPETITION_ID=1
+FOOTBALL_API_SEASON=2026
 FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
 FOOTBALL_SCORE_IDLE_POLL_MS=1800000
 FOOTBALL_SCORE_LIVE_POLL_MS=60000

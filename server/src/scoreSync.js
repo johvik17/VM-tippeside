@@ -5,6 +5,11 @@ const THIRTY_MINUTES = 30 * 60 * 1000;
 const provider = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase();
 const apiKey = process.env.FOOTBALL_API_KEY?.trim();
 const baseUrl = process.env.FOOTBALL_API_BASE_URL?.trim();
+const competitionId =
+  process.env.FOOTBALL_API_COMPETITION_ID?.trim() ??
+  (provider === "api-football" || provider === "apisports" ? "1" : null) ??
+  (provider === "football-data" || provider === "football-data.org" ? "WC" : null);
+const season = process.env.FOOTBALL_API_SEASON?.trim() ?? "2026";
 const livePollMs = Number(process.env.FOOTBALL_SCORE_LIVE_POLL_MS ?? ONE_MINUTE);
 const idlePollMs = Number(process.env.FOOTBALL_SCORE_IDLE_POLL_MS ?? THIRTY_MINUTES);
 const dailyRequestLimit = Number(process.env.FOOTBALL_API_DAILY_LIMIT ?? 90);
@@ -23,7 +28,7 @@ export function startScorePolling() {
   console.log(
     `[scores] Starting ${provider} score polling. idle=${Math.round(idlePollMs / 1000)}s live=${Math.round(
       livePollMs / 1000
-    )}s dailyLimit=${dailyRequestLimit}.`
+    )}s dailyLimit=${dailyRequestLimit} competition=${competitionId ?? "strict-name-filter"} season=${season}.`
   );
 
   scheduleNextSync(0);
@@ -58,12 +63,14 @@ export async function syncScores() {
     const hasLiveBeforeFetch = localMatches.some((match) => match.status === "LIVE");
     console.log(hasLiveBeforeFetch ? "[scores] live polling" : "[scores] idle polling");
 
+    console.log("[scores] fetching FIFA World Cup fixtures only");
     const apiFixtures = await fetchFixtures(today);
     requestCount += 1;
 
-    const updates = matchFixtures(localMatches, apiFixtures);
+    const worldCupFixtures = apiFixtures.filter(isWorldCupFixture);
+    const updates = matchFixtures(localMatches, worldCupFixtures);
     console.log(
-      `[scores] Fetched ${apiFixtures.length} fixtures for ${today}, matched ${updates.length} local matches. Requests today: ${requestCount}/${dailyRequestLimit}.`
+      `[scores] Fetched ${apiFixtures.length} fixtures for ${today}, kept ${worldCupFixtures.length} FIFA World Cup fixtures, matched ${updates.length} local matches. Requests today: ${requestCount}/${dailyRequestLimit}.`
     );
 
     for (const { match, fixture } of updates) {
@@ -121,14 +128,22 @@ async function fetchFixtures(date) {
 
 function buildFixtureUrl(date) {
   if (baseUrl.includes("{date}")) {
-    return baseUrl.replaceAll("{date}", date);
+    return baseUrl
+      .replaceAll("{date}", date)
+      .replaceAll("{competitionId}", competitionId ?? "")
+      .replaceAll("{season}", season);
   }
 
   const url = new URL(baseUrl);
   if (provider === "football-data" || provider === "football-data.org") {
+    if (competitionId && !url.pathname.includes("/competitions/")) {
+      url.pathname = `${url.pathname.replace(/\/$/, "")}/competitions/${competitionId}/matches`;
+    }
     url.searchParams.set("dateFrom", date);
     url.searchParams.set("dateTo", date);
   } else {
+    if (competitionId) url.searchParams.set("league", competitionId);
+    if (season) url.searchParams.set("season", season);
     url.searchParams.set("date", date);
   }
   return url.toString();
@@ -155,7 +170,9 @@ function normalizeFixtures(data) {
       awayTeam: fixture.teams?.away?.name,
       homeScore: numberOrNull(fixture.goals?.home),
       awayScore: numberOrNull(fixture.goals?.away),
-      status: mapApiFootballStatus(fixture.fixture?.status?.short)
+      status: mapApiFootballStatus(fixture.fixture?.status?.short),
+      competitionId: fixture.league?.id ? String(fixture.league.id) : null,
+      competitionName: fixture.league?.name
     }));
   }
 
@@ -167,7 +184,9 @@ function normalizeFixtures(data) {
       awayTeam: match.awayTeam?.name,
       homeScore: numberOrNull(match.score?.fullTime?.home ?? match.score?.regularTime?.home),
       awayScore: numberOrNull(match.score?.fullTime?.away ?? match.score?.regularTime?.away),
-      status: mapFootballDataStatus(match.status)
+      status: mapFootballDataStatus(match.status),
+      competitionId: match.competition?.code ?? (match.competition?.id ? String(match.competition.id) : null),
+      competitionName: match.competition?.name
     }));
   }
 
@@ -179,8 +198,30 @@ function normalizeFixtures(data) {
     awayTeam: fixture.awayTeam ?? fixture.away_team ?? fixture.away?.name,
     homeScore: numberOrNull(fixture.homeScore ?? fixture.home_score ?? fixture.score?.home),
     awayScore: numberOrNull(fixture.awayScore ?? fixture.away_score ?? fixture.score?.away),
-    status: normalizeStatus(fixture.status)
+    status: normalizeStatus(fixture.status),
+    competitionId: fixture.competitionId ?? fixture.competition_id ?? fixture.leagueId ?? fixture.league_id ?? null,
+    competitionName: fixture.competitionName ?? fixture.competition_name ?? fixture.leagueName ?? fixture.league_name
   }));
+}
+
+function isWorldCupFixture(fixture) {
+  if (competitionId && fixture.competitionId && String(fixture.competitionId) === String(competitionId)) {
+    return true;
+  }
+
+  if (competitionId && !fixture.competitionId && provider !== "custom") {
+    return true;
+  }
+
+  return isStrictWorldCupName(fixture.competitionName);
+}
+
+function isStrictWorldCupName(name) {
+  const normalized = normalizeTeam(name);
+  if (!normalized.includes("worldcup")) return false;
+
+  const blockedTerms = ["club", "qualification", "qualifier", "qualifying", "women", "u17", "u20", "nations", "friendly"];
+  return !blockedTerms.some((term) => normalized.includes(term));
 }
 
 function matchFixtures(localMatches, apiFixtures) {
