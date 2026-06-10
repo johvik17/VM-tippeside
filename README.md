@@ -24,6 +24,37 @@ Backend køyrer på `http://localhost:4000`.
 Backenden krev `DATABASE_URL`. Bruk Supabase connection string, eller ein lokal
 PostgreSQL-database dersom du vil teste utan Supabase.
 
+## Automatisk resultatoppdatering
+
+Backenden kan hente kampstatus og resultat frå ein fotball-API-provider. API-nøkkel
+skal berre ligge på backend, aldri i frontend.
+
+Miljøvariablar:
+
+```bash
+FOOTBALL_API_PROVIDER=api-football
+FOOTBALL_API_KEY=your-football-api-key
+FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
+FOOTBALL_SCORE_POLL_MS=300000
+```
+
+Polling skjer kvart femte minutt som standard. Dersom desse variablane manglar,
+starter serveren utan automatisk score-sync og admin kan framleis legge inn
+resultat manuelt.
+
+Støtta provider-modusar:
+
+- `api-football` / `apisports`: sender nøkkel i `x-apisports-key`
+- `football-data` / `football-data.org`: sender nøkkel i `X-Auth-Token`
+- anna verdi: sender nøkkel som `Authorization: Bearer ...`
+
+Fixtures blir matchet mot lokale kampar slik:
+
+1. `matchNumber` / `match_number` dersom API-et sender det.
+2. Dato + heimelag + bortelag dersom kampnummer manglar.
+
+Når ein kamp blir `FINISHED`, blir poenga for kampen rekna ut automatisk.
+
 ## Testbrukarar
 
 Seed-data blir oppretta automatisk første gong serveren startar mot ein tom
@@ -51,14 +82,7 @@ GitHub Pages kan ikkje køyre Express-backenden. Frontend må derfor byggjast me
 4. Bruk connection string som `DATABASE_URL` i Render.
 5. Set `DB_SSL=true`.
 
-Backenden opprettar tabellane automatisk ved oppstart:
-
-- `users`
-- `matches`
-- `predictions`
-
-Den seedar også admin/demo-brukarar og VM 2026 gruppespelkampar dersom databasen
-er tom.
+Backenden opprettar tabellane automatisk ved oppstart.
 
 ## Render
 
@@ -80,6 +104,10 @@ JWT_SECRET=ein-lang-tilfeldig-hemmelighet
 CLIENT_ORIGIN=https://johvik17.github.io
 SEED_ADMIN_PASSWORD=vel-eit-sterkt-passord
 SEED_DEMO_PASSWORD=vel-eit-sterkt-passord
+FOOTBALL_API_PROVIDER=api-football
+FOOTBALL_API_KEY=din-api-nokkel
+FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
+FOOTBALL_SCORE_POLL_MS=300000
 ```
 
 Når Render er deploya, test:
@@ -128,4 +156,5 @@ https://johvik17.github.io/VM-tippeside/
 - Låsing av tips 10 minutt før kampstart
 - Adminside for å legge inn kampar og sluttresultat
 - Automatisk poengutrekning
+- Automatisk resultatoppdatering via backend-jobb
 - Leaderboard med rangering

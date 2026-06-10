@@ -26,6 +26,7 @@ import {
   registerSchema,
   resultSchema
 } from "./validation.js";
+import { startScorePolling } from "./scoreSync.js";
 
 await initDb();
 
@@ -555,6 +556,7 @@ app.use((err, _req, res, _next) => {
 
 app.listen(port, () => {
   console.log(`VM-tippe API køyrer på port ${port}`);
+  startScorePolling();
 });
 
 function mapMatch(match) {

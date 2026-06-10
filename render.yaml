@@ -21,3 +21,11 @@ services:
         sync: false
       - key: SEED_DEMO_PASSWORD
         sync: false
+      - key: FOOTBALL_API_PROVIDER
+        value: api-football
+      - key: FOOTBALL_API_KEY
+        sync: false
+      - key: FOOTBALL_API_BASE_URL
+        sync: false
+      - key: FOOTBALL_SCORE_POLL_MS
+        value: 300000

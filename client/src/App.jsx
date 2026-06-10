@@ -661,7 +661,7 @@ function PublicPredictionsTable({ predictions, loading }) {
             <thead>
               <tr>
                 <th>Bruker</th>
-                <th>1X2</th>
+                <th>HUB</th>
                 <th>Resultat</th>
                 <th>Sist endret</th>
               </tr>
@@ -758,7 +758,7 @@ function MyTips({ matches, predictionsByMatch }) {
             <tr>
               <th>Kamp</th>
               <th>Tid</th>
-              <th>1X2</th>
+              <th>HUB</th>
               <th>Resultat</th>
               <th>Status</th>
             </tr>
@@ -942,42 +942,47 @@ function FriendsPanel() {
   return (
     <main className="feature-panel friends-panel">
       <div>
-        <p className="eyebrow">Om Siden</p>
+        <p className="eyebrow">Info</p>
         <h2>Slik fungerer VM-tippekonkurransen</h2>
       </div>
-      
+
       <section className="info-section">
-        <h3>📋 Hvordan tippe</h3>
-        <p>Gå til <strong>Kamper</strong>-fanen og tipp på kampene dine. For hver kamp taster du inn:</p>
+        <h3>Hvordan tipper du?</h3>
+        <p>Gå til <strong>Kamper</strong> og velg datoen du vil tippe på. På hvert kampkort skriver du inn hvor mange mål du tror hvert lag scorer.</p>
         <ul>
-          <li><strong>Hjemmelaget sitt mål</strong></li>
-          <li><strong>Bortelaget sitt mål</strong></li>
+          <li><strong>H</strong> betyr hjemmeseier.</li>
+          <li><strong>U</strong> betyr uavgjort.</li>
+          <li><strong>B</strong> betyr borteseier.</li>
         </ul>
-        <p>Appen beregner automatisk om det blir hjemmeseier, uavgjort eller borteseier basert på målene du taster inn.</p>
+        <p>Appen regner automatisk ut H, U eller B basert på resultatet du skriver inn.</p>
       </section>
 
       <section className="info-section">
-        <h3>🏆 Poenggivning</h3>
+        <h3>Poeng for kamptips</h3>
         <ul>
-          <li><strong>1 poeng</strong> - Riktig utfall (1, X eller 2)</li>
-          <li><strong>2 poeng</strong> - Eksakt resultat (f.eks. 2-1)</li>
-          <li><strong>3 poeng total</strong> - Perfekt tips (både utfall og resultat korrekt)</li>
+          <li><strong>3 poeng</strong> for riktig HUB-tips.</li>
+          <li><strong>2 bonuspoeng</strong> for helt riktig resultat.</li>
+          <li><strong>5 poeng maks</strong> per kamp.</li>
         </ul>
       </section>
 
       <section className="info-section">
-        <h3>🔒 Låsing av kamper</h3>
-        <p>Når avspark nærmer seg, blir kampen låst. Du kan fremdeles se dine tips, men du kan ikke endre dem. Offentlige tips fra andre brukere blir også synlige.</p>
+        <h3>Når låses tipsene?</h3>
+        <p>Hver kamp låses 10 minutter før kampstart. Etter låsing kan du ikke endre tipset ditt, men du kan se hva andre har tippet på den kampen.</p>
       </section>
 
       <section className="info-section">
-        <h3>📊 Oversikt</h3>
-        <p>I <strong>Oversikt</strong>-fanen ser du alle dine lagrede tips. I <strong>Leaderboard</strong> kan du se hvordan du ligger an mot andre konkurrenter.</p>
+        <h3>Ekstra tips</h3>
+        <p><strong>Ekstra tips</strong> er et eget bonusspill for moro skyld. Moropoengene der påvirker ikke leaderboardet for kamptips.</p>
+      </section>
+
+      <section className="info-section">
+        <h3>Hvor ser du resultatene?</h3>
+        <p>I <strong>Mine tips</strong> ser du alle tipsene du har lagret. I <strong>Leaderboard</strong> ser du rangeringen basert på kamppoeng.</p>
       </section>
     </main>
   );
 }
-
 function AdminPage({ matches, extraResult, onChanged, onError }) {
   const [form, setForm] = useState(emptyMatchForm);
 
