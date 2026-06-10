@@ -746,8 +746,47 @@ td {
 
 .friends-panel {
   display: grid;
-  gap: 10px;
-  max-width: 620px;
+  gap: 20px;
+  max-width: 720px;
+}
+
+.info-section {
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.info-section h3 {
+  margin: 0 0 12px;
+  color: #ffffff;
+  font-size: 1.1rem;
+}
+
+.info-section p {
+  margin: 0 0 10px;
+  color: #d9e8f7;
+  line-height: 1.6;
+}
+
+.info-section p:last-of-type {
+  margin-bottom: 0;
+}
+
+.info-section ul {
+  margin: 12px 0;
+  padding-left: 20px;
+  list-style: none;
+}
+
+.info-section li {
+  margin: 8px 0;
+  color: #d9e8f7;
+  line-height: 1.6;
+}
+
+.info-section strong {
+  color: #8fe8c0;
 }
 
 .admin-layout {

@@ -228,8 +228,8 @@ function NavBar({ view, setView, isAdmin }) {
   const items = [
     ["matches", "Kamper", Trophy],
     ["leaderboard", "Leaderboard", Medal],
-    ["myTips", "Mine tips", ClipboardList],
-    ["friends", "Venner", Users]
+    ["myTips", "Oversikt", ClipboardList],
+    ["friends", "Info", Users]
   ];
 
   if (isAdmin) items.push(["admin", "Admin", ShieldCheck]);
@@ -415,7 +415,7 @@ function outcomeFromScore(homeGoals, awayGoals) {
 }
 
 function MatchCard({ match, prediction, onSaved, onError }) {
-  const [homeGoals, setHomeGoals] = useState(prediction?.predictedHomeGoals ?? 1);
+  const [homeGoals, setHomeGoals] = useState(prediction?.predictedHomeGoals ?? 0);
   const [awayGoals, setAwayGoals] = useState(prediction?.predictedAwayGoals ?? 0);
   const [publicPredictions, setPublicPredictions] = useState([]);
   const [publicLoading, setPublicLoading] = useState(false);
@@ -426,7 +426,7 @@ function MatchCard({ match, prediction, onSaved, onError }) {
   const statusClass = isFinished ? "done" : isLive ? "live" : isLocked ? "locked" : "open";
 
   useEffect(() => {
-    setHomeGoals(prediction?.predictedHomeGoals ?? 1);
+    setHomeGoals(prediction?.predictedHomeGoals ?? 0);
     setAwayGoals(prediction?.predictedAwayGoals ?? 0);
   }, [prediction]);
 
@@ -699,10 +699,39 @@ function MyTips({ matches, predictionsByMatch }) {
 function FriendsPanel() {
   return (
     <main className="feature-panel friends-panel">
-      <Users size={34} />
-      <p className="eyebrow">Venner</p>
-      <h2>Privat liga kommer her</h2>
-      <p className="muted">Designet er klart for venneligaer, invitasjonskode og små rivaliseringer. Funksjonen kan kobles på uten å endre tippingflyten.</p>
+      <div>
+        <p className="eyebrow">Om Siden</p>
+        <h2>Slik fungerer VM-tippekonkurransen</h2>
+      </div>
+      
+      <section className="info-section">
+        <h3>📋 Hvordan tippe</h3>
+        <p>Gå til <strong>Kamper</strong>-fanen og tipp på kampene dine. For hver kamp taster du inn:</p>
+        <ul>
+          <li><strong>Hjemmelaget sitt mål</strong></li>
+          <li><strong>Bortelaget sitt mål</strong></li>
+        </ul>
+        <p>Appen beregner automatisk om det blir hjemmeseier, uavgjort eller borteseier basert på målene du taster inn.</p>
+      </section>
+
+      <section className="info-section">
+        <h3>🏆 Poenggivning</h3>
+        <ul>
+          <li><strong>3 poeng</strong> - Riktig utfall (1, X eller 2)</li>
+          <li><strong>2 poeng</strong> - Eksakt resultat (f.eks. 2-1)</li>
+          <li><strong>5 poeng total</strong> - Perfekt tips (både utfall og resultat korrekt)</li>
+        </ul>
+      </section>
+
+      <section className="info-section">
+        <h3>🔒 Låsing av kamper</h3>
+        <p>Når avspark nærmer seg, blir kampen låst. Du kan fremdeles se dine tips, men du kan ikke endre dem. Offentlige tips fra andre brukere blir også synlige.</p>
+      </section>
+
+      <section className="info-section">
+        <h3>📊 Oversikt</h3>
+        <p>I <strong>Oversikt</strong>-fanen ser du alle dine lagrede tips. I <strong>Leaderboard</strong> kan du se hvordan du ligger an mot andre konkurrenter.</p>
+      </section>
     </main>
   );
 }
