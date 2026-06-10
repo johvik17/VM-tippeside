@@ -352,7 +352,8 @@ input:focus {
 }
 
 .daily-view,
-.leaderboard-view {
+.leaderboard-view,
+.extra-view {
   display: grid;
   gap: 16px;
 }
@@ -617,6 +618,28 @@ input:focus {
   margin-bottom: 4px;
 }
 
+.score-inputs label {
+  min-width: 0;
+}
+
+.score-team-label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.score-team-label span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.score-flag {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
 .public-predictions {
   margin-top: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -724,6 +747,84 @@ input:focus {
   overflow-x: auto;
 }
 
+.extra-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.extra-card,
+.extra-public-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.05));
+  border-radius: 22px;
+  padding: 18px;
+}
+
+.extra-card h3,
+.extra-public h2 {
+  margin: 0 0 14px;
+  color: #ffffff;
+  font-size: 1.3rem;
+}
+
+.xi-card,
+.extra-grid .premium-button,
+.extra-public {
+  grid-column: 1 / -1;
+}
+
+.xi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.team-input-wrap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.team-input-wrap span {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.extra-public-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.extra-public-card {
+  display: grid;
+  gap: 10px;
+}
+
+.extra-public-card p {
+  margin: 0;
+  color: #d9e8f7;
+}
+
+.extra-public-card details {
+  color: #e6edf7;
+}
+
+.extra-public-card summary {
+  cursor: pointer;
+  color: #8fe8c0;
+  font-weight: 900;
+}
+
+.xi-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  color: #d9e8f7;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -799,6 +900,10 @@ td {
 .admin-panel {
   padding: 18px;
   border-radius: 24px;
+}
+
+.admin-panel.wide {
+  grid-column: 1 / -1;
 }
 
 .admin-panel h2 {
@@ -885,8 +990,9 @@ td {
 
   .tabs button {
     flex-direction: column;
+    flex: 1 1 0;
     gap: 3px;
-    min-width: 58px;
+    min-width: 0;
     padding: 8px 6px;
     font-size: 0.72rem;
   }
@@ -895,8 +1001,14 @@ td {
   .content-grid,
   .admin-layout,
   .score-inputs,
+  .extra-grid,
+  .extra-public-grid,
   .leaderboard-hero,
   .podium {
+    grid-template-columns: 1fr;
+  }
+
+  .xi-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1032,7 +1144,7 @@ td {
   }
 
   .tabs button {
-    min-width: 50px;
+    min-width: 0;
     font-size: 0.68rem;
   }
 }

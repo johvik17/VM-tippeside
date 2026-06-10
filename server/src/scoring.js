@@ -20,3 +20,51 @@ export function calculatePredictionPoints(prediction, match) {
 
   return outcomePoints + exactPoints;
 }
+
+const xiFields = [
+  "goalkeeper",
+  "left_back",
+  "center_back1",
+  "center_back2",
+  "right_back",
+  "midfielder1",
+  "midfielder2",
+  "midfielder3",
+  "left_wing",
+  "striker",
+  "right_wing"
+];
+
+export function calculateExtraPredictionPoints(prediction, result) {
+  if (!prediction || !result) return 0;
+
+  let points = 0;
+
+  if (sameText(prediction.predicted_winner_team, result.winner_team)) {
+    points += 10;
+  }
+
+  if (
+    sameText(prediction.predicted_top_scorer_name, result.top_scorer_name) &&
+    sameText(prediction.predicted_top_scorer_team, result.top_scorer_team)
+  ) {
+    points += 10;
+  }
+
+  for (const field of xiFields) {
+    if (sameText(prediction[field], result[field])) {
+      points += 2;
+    }
+  }
+
+  return Math.min(points, 42);
+}
+
+function sameText(left, right) {
+  if (!left || !right) return false;
+  return normalizeText(left) === normalizeText(right);
+}
+
+function normalizeText(value) {
+  return String(value).trim().toLocaleLowerCase("nb-NO");
+}

@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 export const registerSchema = z.object({
   username: z.string().trim().min(3).max(32),
@@ -36,5 +36,34 @@ export const matchSchema = z.object({
 export const resultSchema = z.object({
   homeScore: z.number().int().min(0).max(30),
   awayScore: z.number().int().min(0).max(30)
+});
+
+const optionalName = z.string().trim().max(100).optional().nullable();
+
+export const extraPredictionSchema = z.object({
+  predictedWinnerTeam: optionalName,
+  predictedTopScorerName: optionalName,
+  predictedTopScorerTeam: optionalName,
+  goalkeeper: optionalName,
+  leftBack: optionalName,
+  centerBack1: optionalName,
+  centerBack2: optionalName,
+  rightBack: optionalName,
+  midfielder1: optionalName,
+  midfielder2: optionalName,
+  midfielder3: optionalName,
+  leftWing: optionalName,
+  striker: optionalName,
+  rightWing: optionalName
+});
+
+export const extraResultSchema = extraPredictionSchema.extend({
+  winnerTeam: optionalName,
+  topScorerName: optionalName,
+  topScorerTeam: optionalName
+}).omit({
+  predictedWinnerTeam: true,
+  predictedTopScorerName: true,
+  predictedTopScorerTeam: true
 });
 

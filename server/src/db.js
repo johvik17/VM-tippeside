@@ -1,7 +1,7 @@
 import pg from "pg";
 import bcrypt from "bcryptjs";
 import { DateTime } from "luxon";
-import { calculatePredictionPoints } from "./scoring.js";
+import { calculateExtraPredictionPoints, calculatePredictionPoints } from "./scoring.js";
 import { worldCup2026GroupMatches } from "./data/worldCup2026GroupMatches.js";
 
 const { Pool } = pg;
@@ -77,6 +77,48 @@ export async function initDb() {
       UNIQUE(user_id, match_id)
     );
 
+    CREATE TABLE IF NOT EXISTS extra_predictions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      predicted_winner_team TEXT,
+      predicted_top_scorer_name TEXT,
+      predicted_top_scorer_team TEXT,
+      goalkeeper TEXT,
+      left_back TEXT,
+      center_back1 TEXT,
+      center_back2 TEXT,
+      right_back TEXT,
+      midfielder1 TEXT,
+      midfielder2 TEXT,
+      midfielder3 TEXT,
+      left_wing TEXT,
+      striker TEXT,
+      right_wing TEXT,
+      points INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS extra_results (
+      id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      winner_team TEXT,
+      top_scorer_name TEXT,
+      top_scorer_team TEXT,
+      goalkeeper TEXT,
+      left_back TEXT,
+      center_back1 TEXT,
+      center_back2 TEXT,
+      right_back TEXT,
+      midfielder1 TEXT,
+      midfielder2 TEXT,
+      midfielder3 TEXT,
+      left_wing TEXT,
+      striker TEXT,
+      right_wing TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_matches_start_time ON matches(start_time);
     CREATE INDEX IF NOT EXISTS idx_predictions_user_id ON predictions(user_id);
     CREATE INDEX IF NOT EXISTS idx_predictions_match_id ON predictions(match_id);
@@ -84,7 +126,9 @@ export async function initDb() {
 
   await seedUsers();
   await seedMatches();
+  await seedExtraResult();
   await recalculateAllPoints();
+  await recalculateAllExtraPoints();
 }
 
 async function seedUsers() {
@@ -178,6 +222,10 @@ async function seedMatches() {
   }
 }
 
+async function seedExtraResult() {
+  await query("INSERT INTO extra_results (id) VALUES (1) ON CONFLICT (id) DO NOTHING");
+}
+
 export function buildKickoffFields(date, localTime, timezone) {
   const kickoff = DateTime.fromISO(`${date}T${localTime}`, { zone: timezone });
   if (!kickoff.isValid) {
@@ -247,6 +295,18 @@ export async function recalculateMatchPoints(matchId) {
   for (const prediction of predictions) {
     await query("UPDATE predictions SET points = $1, updated_at = NOW() WHERE id = $2", [
       calculatePredictionPoints(prediction, prediction),
+      prediction.id
+    ]);
+  }
+}
+
+export async function recalculateAllExtraPoints() {
+  const result = await one("SELECT * FROM extra_results WHERE id = 1");
+  const predictions = await many("SELECT * FROM extra_predictions");
+
+  for (const prediction of predictions) {
+    await query("UPDATE extra_predictions SET points = $1, updated_at = NOW() WHERE id = $2", [
+      calculateExtraPredictionPoints(prediction, result),
       prediction.id
     ]);
   }

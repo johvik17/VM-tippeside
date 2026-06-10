@@ -6,10 +6,21 @@ import bcrypt from "bcryptjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildKickoffFields, getTimezoneForCity, initDb, many, one, query, recalculateMatchPoints } from "./db.js";
+import {
+  buildKickoffFields,
+  getTimezoneForCity,
+  initDb,
+  many,
+  one,
+  query,
+  recalculateAllExtraPoints,
+  recalculateMatchPoints
+} from "./db.js";
 import { requireAdmin, requireAuth, signToken } from "./auth.js";
 import {
   loginSchema,
+  extraPredictionSchema,
+  extraResultSchema,
   matchSchema,
   predictionSchema,
   registerSchema,
@@ -46,6 +57,40 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 const asyncHandler = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
+};
+
+const extraFieldMap = {
+  predictedWinnerTeam: "predicted_winner_team",
+  predictedTopScorerName: "predicted_top_scorer_name",
+  predictedTopScorerTeam: "predicted_top_scorer_team",
+  goalkeeper: "goalkeeper",
+  leftBack: "left_back",
+  centerBack1: "center_back1",
+  centerBack2: "center_back2",
+  rightBack: "right_back",
+  midfielder1: "midfielder1",
+  midfielder2: "midfielder2",
+  midfielder3: "midfielder3",
+  leftWing: "left_wing",
+  striker: "striker",
+  rightWing: "right_wing"
+};
+
+const extraResultFieldMap = {
+  winnerTeam: "winner_team",
+  topScorerName: "top_scorer_name",
+  topScorerTeam: "top_scorer_team",
+  goalkeeper: "goalkeeper",
+  leftBack: "left_back",
+  centerBack1: "center_back1",
+  centerBack2: "center_back2",
+  rightBack: "right_back",
+  midfielder1: "midfielder1",
+  midfielder2: "midfielder2",
+  midfielder3: "midfielder3",
+  leftWing: "left_wing",
+  striker: "striker",
+  rightWing: "right_wing"
 };
 
 app.get("/api/health", (_req, res) => {
@@ -117,6 +162,101 @@ app.get(
   asyncHandler(async (req, res) => {
     const predictions = await many("SELECT * FROM predictions WHERE user_id = $1", [req.user.id]);
     res.json({ predictions: predictions.map(mapPrediction) });
+  })
+);
+
+app.get(
+  "/api/extra-predictions/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const [prediction, result, lock] = await Promise.all([
+      one("SELECT * FROM extra_predictions WHERE user_id = $1", [req.user.id]),
+      one("SELECT * FROM extra_results WHERE id = 1"),
+      getExtraLockMeta()
+    ]);
+
+    res.json({
+      prediction: prediction ? mapExtraPrediction(prediction) : null,
+      result: result ? mapExtraResult(result) : null,
+      lock
+    });
+  })
+);
+
+app.get(
+  "/api/extra-predictions",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    const lock = await getExtraLockMeta();
+    if (!lock.isLocked) {
+      return res.status(423).json({ message: "Ekstra tips blir offentlege når første VM-kamp er låst." });
+    }
+
+    const predictions = await many(
+      `SELECT ep.*, u.username
+       FROM extra_predictions ep
+       JOIN users u ON u.id = ep.user_id
+       ORDER BY lower(u.username) ASC`
+    );
+
+    res.json({ predictions: predictions.map(mapPublicExtraPrediction), lock });
+  })
+);
+
+app.put(
+  "/api/extra-predictions/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const lock = await getExtraLockMeta();
+    if (lock.isLocked) {
+      return res.status(423).json({ message: "Ekstra tips er låst etter første VM-kampstart." });
+    }
+
+    const parsed = extraPredictionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Ugyldige ekstra tips." });
+
+    const values = toDbValues(parsed.data, extraFieldMap);
+    const prediction = await one(
+      `INSERT INTO extra_predictions
+        (
+          user_id,
+          predicted_winner_team,
+          predicted_top_scorer_name,
+          predicted_top_scorer_team,
+          goalkeeper,
+          left_back,
+          center_back1,
+          center_back2,
+          right_back,
+          midfielder1,
+          midfielder2,
+          midfielder3,
+          left_wing,
+          striker,
+          right_wing
+        )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       ON CONFLICT(user_id) DO UPDATE SET
+          predicted_winner_team = EXCLUDED.predicted_winner_team,
+          predicted_top_scorer_name = EXCLUDED.predicted_top_scorer_name,
+          predicted_top_scorer_team = EXCLUDED.predicted_top_scorer_team,
+          goalkeeper = EXCLUDED.goalkeeper,
+          left_back = EXCLUDED.left_back,
+          center_back1 = EXCLUDED.center_back1,
+          center_back2 = EXCLUDED.center_back2,
+          right_back = EXCLUDED.right_back,
+          midfielder1 = EXCLUDED.midfielder1,
+          midfielder2 = EXCLUDED.midfielder2,
+          midfielder3 = EXCLUDED.midfielder3,
+          left_wing = EXCLUDED.left_wing,
+          striker = EXCLUDED.striker,
+          right_wing = EXCLUDED.right_wing,
+          updated_at = NOW()
+       RETURNING *`,
+      [req.user.id, ...Object.values(values)]
+    );
+
+    res.json({ prediction: mapExtraPrediction(prediction), lock });
   })
 );
 
@@ -342,6 +482,60 @@ app.put(
   })
 );
 
+app.put(
+  "/api/admin/extra-results",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = extraResultSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Ugyldig ekstra-fasit." });
+
+    const values = toDbValues(parsed.data, extraResultFieldMap);
+    const result = await one(
+      `INSERT INTO extra_results
+        (
+          id,
+          winner_team,
+          top_scorer_name,
+          top_scorer_team,
+          goalkeeper,
+          left_back,
+          center_back1,
+          center_back2,
+          right_back,
+          midfielder1,
+          midfielder2,
+          midfielder3,
+          left_wing,
+          striker,
+          right_wing
+        )
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       ON CONFLICT(id) DO UPDATE SET
+          winner_team = EXCLUDED.winner_team,
+          top_scorer_name = EXCLUDED.top_scorer_name,
+          top_scorer_team = EXCLUDED.top_scorer_team,
+          goalkeeper = EXCLUDED.goalkeeper,
+          left_back = EXCLUDED.left_back,
+          center_back1 = EXCLUDED.center_back1,
+          center_back2 = EXCLUDED.center_back2,
+          right_back = EXCLUDED.right_back,
+          midfielder1 = EXCLUDED.midfielder1,
+          midfielder2 = EXCLUDED.midfielder2,
+          midfielder3 = EXCLUDED.midfielder3,
+          left_wing = EXCLUDED.left_wing,
+          striker = EXCLUDED.striker,
+          right_wing = EXCLUDED.right_wing,
+          updated_at = NOW()
+       RETURNING *`,
+      Object.values(values)
+    );
+
+    await recalculateAllExtraPoints();
+    res.json({ result: mapExtraResult(result) });
+  })
+);
+
 if (fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));
 
@@ -427,6 +621,79 @@ function mapPublicPrediction(prediction) {
   };
 }
 
+async function getExtraLockMeta() {
+  const firstMatch = await one("SELECT start_time FROM matches ORDER BY start_time ASC LIMIT 1");
+  const deadline = firstMatch?.start_time ? new Date(firstMatch.start_time) : null;
+
+  return {
+    deadline: deadline ? deadline.toISOString() : null,
+    serverTime: new Date().toISOString(),
+    isLocked: deadline ? Date.now() >= deadline.getTime() : false
+  };
+}
+
+function mapExtraPrediction(prediction) {
+  return {
+    id: prediction.id,
+    userId: prediction.user_id,
+    predictedWinnerTeam: prediction.predicted_winner_team,
+    predictedTopScorerName: prediction.predicted_top_scorer_name,
+    predictedTopScorerTeam: prediction.predicted_top_scorer_team,
+    goalkeeper: prediction.goalkeeper,
+    leftBack: prediction.left_back,
+    centerBack1: prediction.center_back1,
+    centerBack2: prediction.center_back2,
+    rightBack: prediction.right_back,
+    midfielder1: prediction.midfielder1,
+    midfielder2: prediction.midfielder2,
+    midfielder3: prediction.midfielder3,
+    leftWing: prediction.left_wing,
+    striker: prediction.striker,
+    rightWing: prediction.right_wing,
+    points: prediction.points,
+    createdAt: toIso(prediction.created_at),
+    updatedAt: toIso(prediction.updated_at)
+  };
+}
+
+function mapPublicExtraPrediction(prediction) {
+  return {
+    ...mapExtraPrediction(prediction),
+    username: prediction.username
+  };
+}
+
+function mapExtraResult(result) {
+  return {
+    winnerTeam: result.winner_team,
+    topScorerName: result.top_scorer_name,
+    topScorerTeam: result.top_scorer_team,
+    goalkeeper: result.goalkeeper,
+    leftBack: result.left_back,
+    centerBack1: result.center_back1,
+    centerBack2: result.center_back2,
+    rightBack: result.right_back,
+    midfielder1: result.midfielder1,
+    midfielder2: result.midfielder2,
+    midfielder3: result.midfielder3,
+    leftWing: result.left_wing,
+    striker: result.striker,
+    rightWing: result.right_wing,
+    updatedAt: toIso(result.updated_at)
+  };
+}
+
+function toDbValues(data, fieldMap) {
+  return Object.fromEntries(
+    Object.entries(fieldMap).map(([apiKey, dbKey]) => [dbKey, normalizeOptionalText(data[apiKey])])
+  );
+}
+
+function normalizeOptionalText(value) {
+  const normalized = typeof value === "string" ? value.trim() : value;
+  return normalized || null;
+}
+
 function toIso(value) {
   return value instanceof Date ? value.toISOString() : value;
 }
@@ -436,3 +703,4 @@ function formatDate(value) {
   if (typeof value === "string") return value.slice(0, 10);
   return value.toISOString().slice(0, 10);
 }
+

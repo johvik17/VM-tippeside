@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CalendarPlus,
@@ -30,6 +30,54 @@ const emptyMatchForm = {
   groupName: "",
   stage: "Group Stage"
 };
+
+const emptyExtraTip = {
+  predictedWinnerTeam: "",
+  predictedTopScorerName: "",
+  predictedTopScorerTeam: "",
+  goalkeeper: "",
+  leftBack: "",
+  centerBack1: "",
+  centerBack2: "",
+  rightBack: "",
+  midfielder1: "",
+  midfielder2: "",
+  midfielder3: "",
+  leftWing: "",
+  striker: "",
+  rightWing: ""
+};
+
+const emptyExtraResult = {
+  winnerTeam: "",
+  topScorerName: "",
+  topScorerTeam: "",
+  goalkeeper: "",
+  leftBack: "",
+  centerBack1: "",
+  centerBack2: "",
+  rightBack: "",
+  midfielder1: "",
+  midfielder2: "",
+  midfielder3: "",
+  leftWing: "",
+  striker: "",
+  rightWing: ""
+};
+
+const tournamentXiFields = [
+  ["goalkeeper", "Keeper"],
+  ["leftBack", "Venstreback"],
+  ["centerBack1", "Midtstopper 1"],
+  ["centerBack2", "Midtstopper 2"],
+  ["rightBack", "Høyreback"],
+  ["midfielder1", "Midtbane 1"],
+  ["midfielder2", "Midtbane 2"],
+  ["midfielder3", "Midtbane 3"],
+  ["leftWing", "Venstre ving"],
+  ["striker", "Spiss"],
+  ["rightWing", "Høyre ving"]
+];
 
 const teamFlagCodes = {
   Algeria: "DZ",
@@ -97,6 +145,10 @@ export function App() {
   const [view, setView] = useState("matches");
   const [matches, setMatches] = useState([]);
   const [predictions, setPredictions] = useState([]);
+  const [extraPrediction, setExtraPrediction] = useState(null);
+  const [extraResult, setExtraResult] = useState(null);
+  const [extraLock, setExtraLock] = useState(null);
+  const [publicExtraPredictions, setPublicExtraPredictions] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,14 +172,25 @@ export function App() {
   async function refreshData() {
     setLoading(true);
     try {
-      const [matchesData, predictionsData, leaderboardData] = await Promise.all([
+      const [matchesData, predictionsData, extraData, leaderboardData] = await Promise.all([
         apiRequest("/matches"),
         apiRequest("/predictions/me"),
+        apiRequest("/extra-predictions/me"),
         apiRequest("/leaderboard")
       ]);
       setMatches(matchesData.matches);
       setPredictions(predictionsData.predictions);
+      setExtraPrediction(extraData.prediction);
+      setExtraResult(extraData.result);
+      setExtraLock(extraData.lock);
       setLeaderboard(leaderboardData.leaderboard);
+
+      if (extraData.lock?.isLocked) {
+        const publicData = await apiRequest("/extra-predictions");
+        setPublicExtraPredictions(publicData.predictions);
+      } else {
+        setPublicExtraPredictions([]);
+      }
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -148,6 +211,10 @@ export function App() {
     setUser(null);
     setMatches([]);
     setPredictions([]);
+    setExtraPrediction(null);
+    setExtraResult(null);
+    setExtraLock(null);
+    setPublicExtraPredictions([]);
     setLeaderboard([]);
   }
 
@@ -183,9 +250,22 @@ export function App() {
       )}
       {view === "leaderboard" && <Leaderboard rows={leaderboard} />}
       {view === "myTips" && <MyTips matches={matches} predictionsByMatch={predictionsByMatch} />}
+      {view === "extraTips" && (
+        <ExtraTipsPage
+          prediction={extraPrediction}
+          result={extraResult}
+          lock={extraLock}
+          publicPredictions={publicExtraPredictions}
+          onSaved={async () => {
+            setMessage("Ekstra tips er lagret.");
+            await refreshData();
+          }}
+          onError={setMessage}
+        />
+      )}
       {view === "friends" && <FriendsPanel />}
       {view === "admin" && user.role === "ADMIN" && (
-        <AdminPage matches={matches} onChanged={refreshData} onError={setMessage} />
+        <AdminPage matches={matches} extraResult={extraResult} onChanged={refreshData} onError={setMessage} />
       )}
     </div>
   );
@@ -228,7 +308,8 @@ function NavBar({ view, setView, isAdmin }) {
   const items = [
     ["matches", "Kamper", Trophy],
     ["leaderboard", "Leaderboard", Medal],
-    ["myTips", "Oversikt", ClipboardList],
+    ["myTips", "Mine tips", ClipboardList],
+    ["extraTips", "Ekstra tips", Sparkles],
     ["friends", "Info", Users]
   ];
 
@@ -515,11 +596,17 @@ function MatchCard({ match, prediction, onSaved, onError }) {
       <form className="prediction-form" onSubmit={savePrediction}>
         <div className="score-inputs">
           <label>
-            {match.homeTeam}
+            <span className="score-team-label">
+              <span className="score-flag">{flagForTeam(match.homeTeam)}</span>
+              <span>{match.homeTeam}</span>
+            </span>
             <input type="number" min="0" max="30" value={homeGoals} disabled={isLocked} onChange={(event) => setHomeGoals(event.target.value)} />
           </label>
           <label>
-            {match.awayTeam}
+            <span className="score-team-label">
+              <span className="score-flag">{flagForTeam(match.awayTeam)}</span>
+              <span>{match.awayTeam}</span>
+            </span>
             <input type="number" min="0" max="30" value={awayGoals} disabled={isLocked} onChange={(event) => setAwayGoals(event.target.value)} />
           </label>
         </div>
@@ -696,6 +783,161 @@ function MyTips({ matches, predictionsByMatch }) {
   );
 }
 
+function ExtraTipsPage({ prediction, lock, publicPredictions, onSaved, onError }) {
+  const [form, setForm] = useState(emptyExtraTip);
+  const isLocked = Boolean(lock?.isLocked);
+
+  useEffect(() => {
+    setForm({ ...emptyExtraTip, ...(prediction ?? {}) });
+  }, [prediction]);
+
+  async function saveExtraTips(event) {
+    event.preventDefault();
+    try {
+      await apiRequest("/extra-predictions/me", {
+        method: "PUT",
+        body: JSON.stringify(form)
+      });
+      await onSaved();
+    } catch (error) {
+      onError(error.message);
+    }
+  }
+
+  return (
+    <main className="extra-view">
+      <section className="leaderboard-hero">
+        <div>
+          <p className="eyebrow">Bonusspill</p>
+          <h2>Ekstra tips</h2>
+          <p className="muted">
+            {isLocked
+              ? "Ekstra tips er låst. Alle brukeres tips er nå synlige."
+              : `Kun for gøy. Teller ikke på leaderboardet. Kan endres frem til første VM-kamp${lock?.deadline ? `: ${formatTimestamp(lock.deadline)}` : "."}`}
+          </p>
+        </div>
+        <div className={`status-pill ${isLocked ? "locked" : "open"}`}>{isLocked ? "Låst" : "Åpen"}</div>
+      </section>
+
+      <form className="extra-grid" onSubmit={saveExtraTips}>
+        <section className="extra-card">
+          <p className="eyebrow">10 moropoeng</p>
+          <h3>Hvem vinner VM?</h3>
+          <TeamTextInput
+            label="VM-vinner"
+            value={form.predictedWinnerTeam}
+            disabled={isLocked}
+            onChange={(value) => setForm({ ...form, predictedWinnerTeam: value })}
+          />
+        </section>
+
+        <section className="extra-card">
+          <p className="eyebrow">10 moropoeng</p>
+          <h3>Hvem blir toppscorer?</h3>
+          <label>
+            Spiller
+            <input
+              value={form.predictedTopScorerName}
+              disabled={isLocked}
+              onChange={(event) => setForm({ ...form, predictedTopScorerName: event.target.value })}
+              placeholder="F.eks. Erling Haaland"
+            />
+          </label>
+          <TeamTextInput
+            label="Landslag"
+            value={form.predictedTopScorerTeam}
+            disabled={isLocked}
+            onChange={(value) => setForm({ ...form, predictedTopScorerTeam: value })}
+          />
+        </section>
+
+        <section className="extra-card xi-card">
+          <p className="eyebrow">2 moropoeng per spiller</p>
+          <h3>Sett opp årets lag</h3>
+          <p className="muted">Formasjon 4-3-3</p>
+          <div className="xi-grid">
+            {tournamentXiFields.map(([key, label]) => (
+              <label key={key}>
+                {label}
+                <input
+                  value={form[key]}
+                  disabled={isLocked}
+                  onChange={(event) => setForm({ ...form, [key]: event.target.value })}
+                  placeholder="Spillernavn"
+                />
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <button className="primary-button premium-button" disabled={isLocked}>
+          {prediction ? "Lagre endringer" : "Lagre ekstra tips"}
+        </button>
+      </form>
+
+      {isLocked && (
+        <section className="table-panel extra-public">
+          <p className="eyebrow">Se alle tips</p>
+          <h2>Alle ekstra tips</h2>
+          {publicPredictions.length === 0 ? (
+            <p className="muted">Ingen ekstra tips er lagret.</p>
+          ) : (
+            <div className="extra-public-grid">
+              {publicPredictions.map((row) => (
+                <article key={row.id} className="extra-public-card">
+                  <div className="user-pill">
+                    <span className="table-avatar">{row.username.slice(0, 1).toUpperCase()}</span>
+                    <strong>{row.username}</strong>
+                    <span>{row.points ?? 0} moropoeng</span>
+                  </div>
+                  <p><b>Vinner:</b> {withFlag(row.predictedWinnerTeam)}</p>
+                  <p><b>Toppscorer:</b> {row.predictedTopScorerName || "-"} {row.predictedTopScorerTeam ? `(${withFlag(row.predictedTopScorerTeam)})` : ""}</p>
+                  <details>
+                    <summary>Årets lag</summary>
+                    <div className="xi-list">
+                      {tournamentXiFields.map(([key, label]) => (
+                        <span key={key}><b>{label}:</b> {row[key] || "-"}</span>
+                      ))}
+                    </div>
+                  </details>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+    </main>
+  );
+}
+
+function TeamTextInput({ label, value, disabled, onChange }) {
+  return (
+    <label>
+      {label}
+      <div className="team-input-wrap">
+        <span>{value ? flagForTeam(value) : String.fromCodePoint(0x2691)}</span>
+        <input
+          list="team-options"
+          value={value ?? ""}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Velg eller skriv land"
+        />
+      </div>
+      <datalist id="team-options">
+        {Object.keys(teamFlagCodes).map((team) => (
+          <option key={team} value={team} />
+        ))}
+      </datalist>
+    </label>
+  );
+}
+
+function withFlag(team) {
+  if (!team) return "-";
+  return `${flagForTeam(team)} ${team}`;
+}
+
 function FriendsPanel() {
   return (
     <main className="feature-panel friends-panel">
@@ -736,7 +978,7 @@ function FriendsPanel() {
   );
 }
 
-function AdminPage({ matches, onChanged, onError }) {
+function AdminPage({ matches, extraResult, onChanged, onError }) {
   const [form, setForm] = useState(emptyMatchForm);
 
   async function createMatch(event) {
@@ -776,6 +1018,7 @@ function AdminPage({ matches, onChanged, onError }) {
           <button className="primary-button">Legg til kamp</button>
         </form>
       </section>
+      <ExtraResultAdmin extraResult={extraResult} onChanged={onChanged} onError={onError} />
       <section className="admin-panel wide">
         <h2>Alle gruppespillkamper og resultat</h2>
         <div className="admin-match-list">
@@ -785,6 +1028,50 @@ function AdminPage({ matches, onChanged, onError }) {
         </div>
       </section>
     </main>
+  );
+}
+
+function ExtraResultAdmin({ extraResult, onChanged, onError }) {
+  const [form, setForm] = useState(emptyExtraResult);
+
+  useEffect(() => {
+    setForm({ ...emptyExtraResult, ...(extraResult ?? {}) });
+  }, [extraResult]);
+
+  async function saveExtraResult(event) {
+    event.preventDefault();
+    try {
+      await apiRequest("/admin/extra-results", {
+        method: "PUT",
+        body: JSON.stringify(form)
+      });
+      await onChanged();
+    } catch (error) {
+      onError(error.message);
+    }
+  }
+
+  return (
+    <section className="admin-panel">
+      <h2>
+        <Sparkles size={20} />
+        Fasit ekstra tips
+      </h2>
+      <form className="stack" onSubmit={saveExtraResult}>
+        <label>VM-vinner<input value={form.winnerTeam} onChange={(event) => setForm({ ...form, winnerTeam: event.target.value })} /></label>
+        <label>Toppscorer<input value={form.topScorerName} onChange={(event) => setForm({ ...form, topScorerName: event.target.value })} /></label>
+        <label>Toppscorer landslag<input value={form.topScorerTeam} onChange={(event) => setForm({ ...form, topScorerTeam: event.target.value })} /></label>
+        <div className="xi-grid admin-xi-grid">
+          {tournamentXiFields.map(([key, label]) => (
+            <label key={key}>
+              {label}
+              <input value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />
+            </label>
+          ))}
+        </div>
+        <button className="primary-button">Lagre fasit</button>
+      </form>
+    </section>
   );
 }
 
