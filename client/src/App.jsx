@@ -408,8 +408,13 @@ function SummaryItem({ label, value, icon: Icon }) {
   );
 }
 
+function outcomeFromScore(homeGoals, awayGoals) {
+  if (homeGoals > awayGoals) return "HOME";
+  if (homeGoals < awayGoals) return "AWAY";
+  return "DRAW";
+}
+
 function MatchCard({ match, prediction, onSaved, onError }) {
-  const [outcome, setOutcome] = useState(prediction?.outcome ?? "HOME");
   const [homeGoals, setHomeGoals] = useState(prediction?.predictedHomeGoals ?? 1);
   const [awayGoals, setAwayGoals] = useState(prediction?.predictedAwayGoals ?? 0);
   const [publicPredictions, setPublicPredictions] = useState([]);
@@ -421,7 +426,6 @@ function MatchCard({ match, prediction, onSaved, onError }) {
   const statusClass = isFinished ? "done" : isLive ? "live" : isLocked ? "locked" : "open";
 
   useEffect(() => {
-    setOutcome(prediction?.outcome ?? "HOME");
     setHomeGoals(prediction?.predictedHomeGoals ?? 1);
     setAwayGoals(prediction?.predictedAwayGoals ?? 0);
   }, [prediction]);
@@ -453,11 +457,12 @@ function MatchCard({ match, prediction, onSaved, onError }) {
   async function savePrediction(event) {
     event.preventDefault();
     try {
+      const calculatedOutcome = outcomeFromScore(Number(homeGoals), Number(awayGoals));
       await apiRequest("/predictions", {
         method: "POST",
         body: JSON.stringify({
           matchId: match.id,
-          outcome,
+          outcome: calculatedOutcome,
           predictedHomeGoals: Number(homeGoals),
           predictedAwayGoals: Number(awayGoals)
         })
@@ -508,17 +513,6 @@ function MatchCard({ match, prediction, onSaved, onError }) {
       )}
 
       <form className="prediction-form" onSubmit={savePrediction}>
-        <div className="segmented">
-          <button type="button" className={outcome === "HOME" ? "selected" : ""} onClick={() => setOutcome("HOME")} disabled={isLocked}>
-            H <small>1</small>
-          </button>
-          <button type="button" className={outcome === "DRAW" ? "selected" : ""} onClick={() => setOutcome("DRAW")} disabled={isLocked}>
-            U <small>X</small>
-          </button>
-          <button type="button" className={outcome === "AWAY" ? "selected" : ""} onClick={() => setOutcome("AWAY")} disabled={isLocked}>
-            B <small>2</small>
-          </button>
-        </div>
         <div className="score-inputs">
           <label>
             {match.homeTeam}
