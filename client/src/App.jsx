@@ -314,7 +314,6 @@ function AuthPage({ onAuth }) {
         <button className="text-button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
           {mode === "login" ? "Ny bruker? Registrer deg" : "Har du bruker? Logg inn"}
         </button>
-        <p className="hint">Test admin med admin / admin123 eller bruker med demo / demo123.</p>
       </section>
     </main>
   );
