@@ -1,0 +1,19 @@
+{
+  "name": "vm-tippe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MVP for VM-tipping med React, Express og SQLite.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "start": "npm run start --workspace server",
+    "build": "npm run build --workspace client",
+    "lint": "npm run lint --workspace client"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "devDependencies": {}
+}

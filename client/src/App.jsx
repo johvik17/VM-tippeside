@@ -1,0 +1,869 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import {
+  CalendarDays,
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Clock3,
+  Crown,
+  Flame,
+  LogOut,
+  Medal,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+  Trophy,
+  Users,
+  UserRound
+} from "lucide-react";
+import { apiRequest } from "./api.js";
+
+const emptyMatchForm = {
+  matchNumber: "",
+  homeTeam: "",
+  awayTeam: "",
+  date: "",
+  localTime: "",
+  stadium: "",
+  city: "",
+  groupName: "",
+  stage: "Group Stage"
+};
+
+const teamFlagCodes = {
+  Algeria: "DZ",
+  Argentina: "AR",
+  Australia: "AU",
+  Austria: "AT",
+  Belgium: "BE",
+  "Bosnia and Herzegovina": "BA",
+  Brazil: "BR",
+  Canada: "CA",
+  "Cape Verde": "CV",
+  Colombia: "CO",
+  "Congo DR": "CD",
+  Croatia: "HR",
+  "Curaçao": "CW",
+  "CuraÃ§ao": "CW",
+  "CuraÃƒÂ§ao": "CW",
+  Czechia: "CZ",
+  Ecuador: "EC",
+  Egypt: "EG",
+  England: "GB",
+  France: "FR",
+  Germany: "DE",
+  Ghana: "GH",
+  Haiti: "HT",
+  Iran: "IR",
+  Iraq: "IQ",
+  "Ivory Coast": "CI",
+  Japan: "JP",
+  Jordan: "JO",
+  Mexico: "MX",
+  Morocco: "MA",
+  Netherlands: "NL",
+  "New Zealand": "NZ",
+  Norway: "NO",
+  Panama: "PA",
+  Paraguay: "PY",
+  Portugal: "PT",
+  Qatar: "QA",
+  "Saudi Arabia": "SA",
+  Scotland: "GB",
+  Senegal: "SN",
+  "South Africa": "ZA",
+  "South Korea": "KR",
+  Spain: "ES",
+  Sweden: "SE",
+  Switzerland: "CH",
+  Tunisia: "TN",
+  "Türkiye": "TR",
+  "TÃ¼rkiye": "TR",
+  "TÃƒÂ¼rkiye": "TR",
+  Uruguay: "UY",
+  USA: "US",
+  Uzbekistan: "UZ"
+};
+
+function flagForTeam(name) {
+  const code = teamFlagCodes[name];
+  if (!code) return String.fromCodePoint(0x2691);
+  return code
+    .toUpperCase()
+    .split("")
+    .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
+    .join("");
+}
+
+export function App() {
+  const [user, setUser] = useState(readStoredUser);
+  const [view, setView] = useState("matches");
+  const [matches, setMatches] = useState([]);
+  const [predictions, setPredictions] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const predictionsByMatch = useMemo(() => {
+    return Object.fromEntries(predictions.map((prediction) => [prediction.matchId, prediction]));
+  }, [predictions]);
+
+  const nextMatch = useMemo(() => {
+    const now = Date.now();
+    return matches
+      .filter((match) => new Date(match.kickoffAtUtc || match.startTime).getTime() > now)
+      .sort((a, b) => new Date(a.kickoffAtUtc || a.startTime) - new Date(b.kickoffAtUtc || b.startTime))[0];
+  }, [matches]);
+
+  useEffect(() => {
+    if (!user) return;
+    refreshData();
+  }, [user]);
+
+  async function refreshData() {
+    setLoading(true);
+    try {
+      const [matchesData, predictionsData, leaderboardData] = await Promise.all([
+        apiRequest("/matches"),
+        apiRequest("/predictions/me"),
+        apiRequest("/leaderboard")
+      ]);
+      setMatches(matchesData.matches);
+      setPredictions(predictionsData.predictions);
+      setLeaderboard(leaderboardData.leaderboard);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleAuth({ token, user: nextUser }) {
+    localStorage.setItem("vmTippeToken", token);
+    localStorage.setItem("vmTippeUser", JSON.stringify(nextUser));
+    setUser(nextUser);
+    setView("matches");
+  }
+
+  function logout() {
+    localStorage.removeItem("vmTippeToken");
+    localStorage.removeItem("vmTippeUser");
+    setUser(null);
+    setMatches([]);
+    setPredictions([]);
+    setLeaderboard([]);
+  }
+
+  if (!user) {
+    return <AuthPage onAuth={handleAuth} />;
+  }
+
+  return (
+    <div className="app-shell">
+      <Hero user={user} nextMatch={nextMatch} onLogout={logout} />
+
+      <NavBar view={view} setView={setView} isAdmin={user.role === "ADMIN"} />
+
+      {message && (
+        <div className="notice" role="status">
+          {message}
+          <button onClick={() => setMessage("")}>Lukk</button>
+        </div>
+      )}
+
+      {loading && <p className="loading-line">Laster VM-data...</p>}
+
+      {view === "matches" && (
+        <MatchOverview
+          matches={matches}
+          predictionsByMatch={predictionsByMatch}
+          onSaved={async () => {
+            setMessage("Tipset er lagret.");
+            await refreshData();
+          }}
+          onError={setMessage}
+        />
+      )}
+      {view === "leaderboard" && <Leaderboard rows={leaderboard} />}
+      {view === "myTips" && <MyTips matches={matches} predictionsByMatch={predictionsByMatch} />}
+      {view === "friends" && <FriendsPanel />}
+      {view === "admin" && user.role === "ADMIN" && (
+        <AdminPage matches={matches} onChanged={refreshData} onError={setMessage} />
+      )}
+    </div>
+  );
+}
+
+function Hero({ user, nextMatch, onLogout }) {
+  return (
+    <header className="hero">
+      <div className="hero-content">
+        <div className="world-cup-mark">
+          <Trophy size={28} />
+        </div>
+        <p className="eyebrow">World Cup 2026</p>
+        <h1>VM 2026 Tippekonkurranse</h1>
+        <p className="hero-subtitle">Tipp kampene. Konkurrer med vennene dine.</p>
+        <div className="hero-stats">
+          <div>
+            <span>Neste kamp</span>
+            <strong>{nextMatch ? `${nextMatch.homeTeam} - ${nextMatch.awayTeam}` : "Ingen kamper"}</strong>
+          </div>
+          <div>
+            <span>Avspark</span>
+            <strong>{nextMatch ? formatNorwegianKickoff(nextMatch) : "-"}</strong>
+          </div>
+        </div>
+      </div>
+      <div className="hero-user">
+        <UserRound size={18} />
+        <span>{user.username}</span>
+        {user.role === "ADMIN" && <strong>Admin</strong>}
+        <button className="icon-button" onClick={onLogout} title="Logg ut">
+          <LogOut size={18} />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function NavBar({ view, setView, isAdmin }) {
+  const items = [
+    ["matches", "Kamper", Trophy],
+    ["leaderboard", "Leaderboard", Medal],
+    ["myTips", "Mine tips", ClipboardList],
+    ["friends", "Venner", Users]
+  ];
+
+  if (isAdmin) items.push(["admin", "Admin", ShieldCheck]);
+
+  return (
+    <nav className="tabs" aria-label="Hovednavigasjon">
+      {items.map(([id, label, Icon]) => (
+        <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>
+          <Icon size={18} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function readStoredUser() {
+  const raw = localStorage.getItem("vmTippeUser");
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem("vmTippeUser");
+    localStorage.removeItem("vmTippeToken");
+    return null;
+  }
+}
+
+function AuthPage({ onAuth }) {
+  const [mode, setMode] = useState("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const data = await apiRequest(`/auth/${mode}`, {
+        method: "POST",
+        body: JSON.stringify({ username, password })
+      });
+      onAuth(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="auth-layout">
+      <section className="auth-panel">
+        <div className="world-cup-mark">
+          <Trophy size={26} />
+        </div>
+        <p className="eyebrow">VM-TIPPE</p>
+        <h1>{mode === "login" ? "Logg inn" : "Registrer bruker"}</h1>
+        <form onSubmit={submit} className="stack">
+          <label>
+            Brukernavn
+            <input value={username} onChange={(event) => setUsername(event.target.value)} required />
+          </label>
+          <label>
+            Passord
+            <input
+              type="password"
+              value={password}
+              minLength={mode === "register" ? 6 : 1}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+          {error && <p className="error">{error}</p>}
+          <button className="primary-button" disabled={busy}>
+            {busy ? "Vent litt..." : mode === "login" ? "Logg inn" : "Opprett bruker"}
+          </button>
+        </form>
+        <button className="text-button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+          {mode === "login" ? "Ny bruker? Registrer deg" : "Har du bruker? Logg inn"}
+        </button>
+        <p className="hint">Test admin med admin / admin123 eller bruker med demo / demo123.</p>
+      </section>
+    </main>
+  );
+}
+
+function MatchOverview({ matches, predictionsByMatch, onSaved, onError }) {
+  const matchDates = useMemo(() => {
+    return [...new Set(matches.map(getOsloDate))].sort();
+  }, [matches]);
+  const [selectedDate, setSelectedDate] = useState("");
+
+  useEffect(() => {
+    if (matchDates.length === 0) return;
+    setSelectedDate((current) => current || pickDefaultMatchDate(matchDates));
+  }, [matchDates]);
+
+  const activeDate = selectedDate || matchDates[0];
+  const selectedIndex = Math.max(0, matchDates.indexOf(activeDate));
+  const matchesForDate = matches.filter((match) => getOsloDate(match) === activeDate);
+  const tippedCount = matchesForDate.filter((match) => predictionsByMatch[match.id]).length;
+  const missingCount = matchesForDate.length - tippedCount;
+  const liveCount = matchesForDate.filter(isLiveMatch).length;
+
+  function goToDate(offset) {
+    const nextIndex = Math.min(matchDates.length - 1, Math.max(0, selectedIndex + offset));
+    setSelectedDate(matchDates[nextIndex]);
+  }
+
+  function goToToday() {
+    setSelectedDate(pickDefaultMatchDate(matchDates));
+  }
+
+  if (matchDates.length === 0) {
+    return <p className="muted">Ingen kamper er lagt inn enna.</p>;
+  }
+
+  return (
+    <main className="daily-view">
+      <section className="day-toolbar">
+        <button className="secondary-button" onClick={() => goToDate(-1)} disabled={selectedIndex === 0}>
+          <ChevronLeft size={18} />
+          Forrige dag
+        </button>
+        <div>
+          <p className="eyebrow">Dagens kamper</p>
+          <h2>{formatDisplayDate(activeDate)}</h2>
+        </div>
+        <button className="secondary-button" onClick={goToToday}>I dag</button>
+        <button className="secondary-button" onClick={() => goToDate(1)} disabled={selectedIndex === matchDates.length - 1}>
+          Neste dag
+          <ChevronRight size={18} />
+        </button>
+      </section>
+
+      <div className="date-strip" aria-label="Velg dato">
+        {matchDates.map((date) => (
+          <button key={date} className={date === activeDate ? "active" : ""} onClick={() => setSelectedDate(date)}>
+            {formatShortDate(date)}
+          </button>
+        ))}
+      </div>
+
+      <section className="day-summary">
+        <SummaryItem label="Kamper" value={matchesForDate.length} icon={CalendarDays} />
+        <SummaryItem label="Tippet" value={tippedCount} icon={Sparkles} />
+        <SummaryItem label="Mangler" value={missingCount} icon={Clock3} />
+        <SummaryItem label="Live" value={liveCount} icon={Flame} />
+      </section>
+
+      <section className="content-grid fade-in">
+        {matchesForDate.map((match) => (
+          <MatchCard
+            key={match.id}
+            match={match}
+            prediction={predictionsByMatch[match.id]}
+            onSaved={onSaved}
+            onError={onError}
+          />
+        ))}
+      </section>
+    </main>
+  );
+}
+
+function SummaryItem({ label, value, icon: Icon }) {
+  return (
+    <div>
+      {Icon && <Icon size={18} />}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function MatchCard({ match, prediction, onSaved, onError }) {
+  const [outcome, setOutcome] = useState(prediction?.outcome ?? "HOME");
+  const [homeGoals, setHomeGoals] = useState(prediction?.predictedHomeGoals ?? 1);
+  const [awayGoals, setAwayGoals] = useState(prediction?.predictedAwayGoals ?? 0);
+  const [publicPredictions, setPublicPredictions] = useState([]);
+  const [publicLoading, setPublicLoading] = useState(false);
+  const isLocked = match.isLocked;
+  const isFinished = match.status === "FINISHED";
+  const isLive = isLiveMatch(match);
+  const statusLabel = isFinished ? "Ferdig" : isLive ? "Live" : isLocked ? "LÃ¥st" : "Ã…pen";
+  const statusClass = isFinished ? "done" : isLive ? "live" : isLocked ? "locked" : "open";
+
+  useEffect(() => {
+    setOutcome(prediction?.outcome ?? "HOME");
+    setHomeGoals(prediction?.predictedHomeGoals ?? 1);
+    setAwayGoals(prediction?.predictedAwayGoals ?? 0);
+  }, [prediction]);
+
+  useEffect(() => {
+    if (!isLocked) {
+      setPublicPredictions([]);
+      return;
+    }
+
+    let ignore = false;
+    setPublicLoading(true);
+    apiRequest(`/matches/${match.id}/predictions`)
+      .then((data) => {
+        if (!ignore) setPublicPredictions(data.predictions);
+      })
+      .catch((error) => {
+        if (!ignore) onError(error.message);
+      })
+      .finally(() => {
+        if (!ignore) setPublicLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [isLocked, match.id, onError]);
+
+  async function savePrediction(event) {
+    event.preventDefault();
+    try {
+      await apiRequest("/predictions", {
+        method: "POST",
+        body: JSON.stringify({
+          matchId: match.id,
+          outcome,
+          predictedHomeGoals: Number(homeGoals),
+          predictedAwayGoals: Number(awayGoals)
+        })
+      });
+      onSaved();
+    } catch (error) {
+      onError(error.message);
+    }
+  }
+
+  return (
+    <article className={`match-card ${prediction?.points === 5 ? "perfect-score" : ""}`}>
+      <div className="match-card-top">
+        <span>#{match.matchNumber} Â· Gruppe {match.groupName || "VM"}</span>
+        <span className={`status-pill ${statusClass}`}>{statusLabel}</span>
+      </div>
+
+      <div className="kickoff-row">
+        <Clock3 size={16} />
+        <span>{formatNorwegianKickoff(match)}</span>
+        <strong>Norsk tid</strong>
+      </div>
+
+      <div className="teams-row">
+        <TeamBlock name={match.homeTeam} />
+        <span className="vs-chip">VS</span>
+        <TeamBlock name={match.awayTeam} align="right" />
+      </div>
+
+      <p className="venue-line">
+        {match.stadium}
+        {match.city ? `, ${match.city}` : ""}
+      </p>
+
+      <div className="score-line">
+        {match.homeScore !== null && match.awayScore !== null && (
+          <strong>
+            Sluttresultat: {match.homeScore}-{match.awayScore}
+          </strong>
+        )}
+        {prediction && <span>{prediction.points} poeng</span>}
+      </div>
+
+      {prediction && (
+        <p className="own-prediction">
+          Ditt tips: {outcomeLabel(prediction.outcome)} Â· {prediction.predictedHomeGoals}-{prediction.predictedAwayGoals}
+        </p>
+      )}
+
+      <form className="prediction-form" onSubmit={savePrediction}>
+        <div className="segmented">
+          <button type="button" className={outcome === "HOME" ? "selected" : ""} onClick={() => setOutcome("HOME")} disabled={isLocked}>
+            H <small>1</small>
+          </button>
+          <button type="button" className={outcome === "DRAW" ? "selected" : ""} onClick={() => setOutcome("DRAW")} disabled={isLocked}>
+            U <small>X</small>
+          </button>
+          <button type="button" className={outcome === "AWAY" ? "selected" : ""} onClick={() => setOutcome("AWAY")} disabled={isLocked}>
+            B <small>2</small>
+          </button>
+        </div>
+        <div className="score-inputs">
+          <label>
+            {match.homeTeam}
+            <input type="number" min="0" max="30" value={homeGoals} disabled={isLocked} onChange={(event) => setHomeGoals(event.target.value)} />
+          </label>
+          <label>
+            {match.awayTeam}
+            <input type="number" min="0" max="30" value={awayGoals} disabled={isLocked} onChange={(event) => setAwayGoals(event.target.value)} />
+          </label>
+        </div>
+        <button className="primary-button premium-button" disabled={isLocked}>
+          {isLocked ? "Se tips" : prediction ? "Endre tips" : "Tipp"}
+        </button>
+      </form>
+
+      {isLocked && <PublicPredictionsTable predictions={publicPredictions} loading={publicLoading} />}
+    </article>
+  );
+}
+
+function TeamBlock({ name, align }) {
+  return (
+    <div className={`team-block ${align === "right" ? "right" : ""}`}>
+      <span className="flag">{flagForTeam(name)}</span>
+      <strong>{name}</strong>
+    </div>
+  );
+}
+
+function PublicPredictionsTable({ predictions, loading }) {
+  const totals = predictions.reduce(
+    (acc, prediction) => {
+      acc[prediction.outcome] = (acc[prediction.outcome] ?? 0) + 1;
+      return acc;
+    },
+    { HOME: 0, DRAW: 0, AWAY: 0 }
+  );
+  const total = predictions.length || 1;
+
+  if (loading) return <p className="muted">Laster offentlige tips...</p>;
+
+  return (
+    <div className="public-predictions">
+      <h3>Alle tips</h3>
+      <div className="vote-bars">
+        {["HOME", "DRAW", "AWAY"].map((key) => (
+          <div key={key}>
+            <span>{key === "HOME" ? "H" : key === "DRAW" ? "U" : "B"}</span>
+            <div><i style={{ width: `${(totals[key] / total) * 100}%` }} /></div>
+            <strong>{totals[key]}</strong>
+          </div>
+        ))}
+      </div>
+      {predictions.length === 0 ? (
+        <p className="muted">Ingen tips ble lagret for denne kampen.</p>
+      ) : (
+        <div className="responsive-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Bruker</th>
+                <th>1X2</th>
+                <th>Resultat</th>
+                <th>Sist endret</th>
+              </tr>
+            </thead>
+            <tbody>
+              {predictions.map((prediction) => (
+                <tr key={prediction.id}>
+                  <td>{prediction.username}</td>
+                  <td>{outcomeLabel(prediction.outcome)}</td>
+                  <td>{prediction.predictedHomeGoals}-{prediction.predictedAwayGoals}</td>
+                  <td>{formatTimestamp(prediction.updatedAt || prediction.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Leaderboard({ rows }) {
+  const podium = rows.slice(0, 3);
+  const bestBonus = rows.reduce((best, row) => (row.bonusPoints > (best?.bonusPoints ?? -1) ? row : best), null);
+
+  return (
+    <main className="leaderboard-view">
+      <section className="leaderboard-hero">
+        <div>
+          <p className="eyebrow">Konkurranse</p>
+          <h2>Leaderboard</h2>
+        </div>
+        <div className="bonus-card">
+          <Sparkles size={18} />
+          <span>Flest bonuspoeng</span>
+          <strong>{bestBonus?.username ?? "-"} Â· {bestBonus?.bonusPoints ?? 0}</strong>
+        </div>
+      </section>
+
+      <section className="podium">
+        {podium.map((row, index) => (
+          <div key={row.userId} className={`podium-card place-${index + 1}`}>
+            <span className="avatar">{row.username.slice(0, 1).toUpperCase()}</span>
+            {index === 0 ? <Crown size={22} /> : <Medal size={22} />}
+            <strong>{row.username}</strong>
+            <b>{row.totalPoints} p</b>
+            <small>{row.perfectTips ?? 0} perfekte tips</small>
+          </div>
+        ))}
+      </section>
+
+      <section className="table-panel">
+        <div className="responsive-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Rang</th>
+                <th>Bruker</th>
+                <th>Poeng</th>
+                <th>Tips</th>
+                <th>Perfekte</th>
+                <th>Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.userId}>
+                  <td>#{row.rank}</td>
+                  <td><span className="table-avatar">{row.username.slice(0, 1).toUpperCase()}</span>{row.username}</td>
+                  <td>{row.totalPoints}</td>
+                  <td>{row.predictionsCount}</td>
+                  <td>{row.perfectTips ?? 0}</td>
+                  <td><TrendingUp size={16} className="trend-icon" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function MyTips({ matches, predictionsByMatch }) {
+  const tippedMatches = matches.filter((match) => predictionsByMatch[match.id]);
+
+  return (
+    <main className="table-panel feature-panel">
+      <p className="eyebrow">Mine tips</p>
+      <h2>Dine lagrede tips</h2>
+      <div className="responsive-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Kamp</th>
+              <th>Tid</th>
+              <th>1X2</th>
+              <th>Resultat</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tippedMatches.map((match) => {
+              const prediction = predictionsByMatch[match.id];
+              return (
+                <tr key={match.id}>
+                  <td>{flagForTeam(match.homeTeam)} {match.homeTeam} - {flagForTeam(match.awayTeam)} {match.awayTeam}</td>
+                  <td>{formatNorwegianKickoff(match)}</td>
+                  <td>{outcomeLabel(prediction.outcome)}</td>
+                  <td>{prediction.predictedHomeGoals}-{prediction.predictedAwayGoals}</td>
+                  <td>{match.isLocked ? "LÃ¥st" : "Ã…pen"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  );
+}
+
+function FriendsPanel() {
+  return (
+    <main className="feature-panel friends-panel">
+      <Users size={34} />
+      <p className="eyebrow">Venner</p>
+      <h2>Privat liga kommer her</h2>
+      <p className="muted">Designet er klart for venneligaer, invitasjonskode og smÃ¥ rivaliseringer. Funksjonen kan kobles pÃ¥ uten Ã¥ endre tippingflyten.</p>
+    </main>
+  );
+}
+
+function AdminPage({ matches, onChanged, onError }) {
+  const [form, setForm] = useState(emptyMatchForm);
+
+  async function createMatch(event) {
+    event.preventDefault();
+    try {
+      await apiRequest("/admin/matches", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          matchNumber: form.matchNumber ? Number(form.matchNumber) : null
+        })
+      });
+      setForm(emptyMatchForm);
+      await onChanged();
+    } catch (error) {
+      onError(error.message);
+    }
+  }
+
+  return (
+    <main className="admin-layout">
+      <section className="admin-panel">
+        <h2>
+          <CalendarPlus size={20} />
+          Ny kamp
+        </h2>
+        <form className="stack" onSubmit={createMatch}>
+          <label>Kampnummer<input type="number" min="1" max="104" value={form.matchNumber} onChange={(event) => setForm({ ...form, matchNumber: event.target.value })} /></label>
+          <label>Heimelag<input value={form.homeTeam} onChange={(event) => setForm({ ...form, homeTeam: event.target.value })} required /></label>
+          <label>Bortelag<input value={form.awayTeam} onChange={(event) => setForm({ ...form, awayTeam: event.target.value })} required /></label>
+          <label>Dato<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required /></label>
+          <label>Lokal tid<input type="time" value={form.localTime} onChange={(event) => setForm({ ...form, localTime: event.target.value })} required /></label>
+          <label>Stadion<input value={form.stadium} onChange={(event) => setForm({ ...form, stadium: event.target.value })} /></label>
+          <label>By<input value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} /></label>
+          <label>Gruppe<input value={form.groupName} onChange={(event) => setForm({ ...form, groupName: event.target.value })} /></label>
+          <label>Stage<input value={form.stage} onChange={(event) => setForm({ ...form, stage: event.target.value })} /></label>
+          <button className="primary-button">Legg til kamp</button>
+        </form>
+      </section>
+      <section className="admin-panel wide">
+        <h2>Alle gruppespillkamper og resultat</h2>
+        <div className="admin-match-list">
+          {matches.map((match) => (
+            <ResultRow key={match.id} match={match} onChanged={onChanged} onError={onError} />
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ResultRow({ match, onChanged, onError }) {
+  const [homeScore, setHomeScore] = useState(match.homeScore ?? 0);
+  const [awayScore, setAwayScore] = useState(match.awayScore ?? 0);
+
+  async function saveResult(event) {
+    event.preventDefault();
+    try {
+      await apiRequest(`/admin/matches/${match.id}/result`, {
+        method: "PUT",
+        body: JSON.stringify({
+          homeScore: Number(homeScore),
+          awayScore: Number(awayScore)
+        })
+      });
+      await onChanged();
+    } catch (error) {
+      onError(error.message);
+    }
+  }
+
+  return (
+    <form className="result-row" onSubmit={saveResult}>
+      <div>
+        <strong>#{match.matchNumber} {match.homeTeam} - {match.awayTeam}</strong>
+        <span>Gruppe {match.groupName} - {formatNorwegianKickoff(match)} norsk tid - {match.stadium}{match.city ? `, ${match.city}` : ""}</span>
+      </div>
+      <input type="number" min="0" max="30" value={homeScore} onChange={(event) => setHomeScore(event.target.value)} />
+      <input type="number" min="0" max="30" value={awayScore} onChange={(event) => setAwayScore(event.target.value)} />
+      <button className="secondary-button">Lagre</button>
+    </form>
+  );
+}
+
+function pickDefaultMatchDate(matchDates) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today < matchDates[0]) return matchDates[0];
+  return matchDates.find((date) => date >= today) ?? matchDates[matchDates.length - 1];
+}
+
+function outcomeLabel(outcome) {
+  return {
+    HOME: "Heimeseier",
+    DRAW: "Uavgjort",
+    AWAY: "Borteseier"
+  }[outcome] ?? outcome;
+}
+
+function formatDisplayDate(date) {
+  return new Intl.DateTimeFormat("nb-NO", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).format(new Date(`${date}T12:00:00`));
+}
+
+function formatShortDate(date) {
+  return new Intl.DateTimeFormat("nb-NO", {
+    day: "2-digit",
+    month: "short"
+  }).format(new Date(`${date}T12:00:00`));
+}
+
+function getOsloDate(match) {
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Oslo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(match.kickoffAtUtc || match.startTime));
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function formatNorwegianKickoff(match) {
+  return new Intl.DateTimeFormat("nb-NO", {
+    timeZone: "Europe/Oslo",
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(match.kickoffAtUtc || match.startTime));
+}
+
+function formatTimestamp(value) {
+  return new Intl.DateTimeFormat("nb-NO", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
+function isLiveMatch(match) {
+  const kickoff = new Date(match.kickoffAtUtc || match.startTime).getTime();
+  const now = Date.now();
+  return now >= kickoff && now <= kickoff + 2 * 60 * 60 * 1000 && match.status !== "FINISHED";
+}
