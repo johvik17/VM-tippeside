@@ -1,41 +1,58 @@
-import Database from "better-sqlite3";
+import pg from "pg";
 import bcrypt from "bcryptjs";
 import { DateTime } from "luxon";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { calculatePredictionPoints } from "./scoring.js";
 import { worldCup2026GroupMatches } from "./data/worldCup2026GroupMatches.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const dataDir = path.resolve(__dirname, "../data");
-fs.mkdirSync(dataDir, { recursive: true });
+const { Pool } = pg;
 
-export const db = new Database(path.join(dataDir, "vm-tippe.sqlite"));
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+const databaseUrl = process.env.DATABASE_URL;
 
-export function initDb() {
-  db.exec(`
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL manglar. Set denne til Supabase PostgreSQL connection string.");
+}
+
+const sslEnabled = process.env.DB_SSL !== "false";
+
+export const pool = new Pool({
+  connectionString: databaseUrl,
+  ssl: sslEnabled ? { rejectUnauthorized: false } : false
+});
+
+export async function query(text, params = []) {
+  return pool.query(text, params);
+}
+
+export async function one(text, params = []) {
+  const result = await query(text, params);
+  return result.rows[0] ?? null;
+}
+
+export async function many(text, params = []) {
+  const result = await query(text, params);
+  return result.rows;
+}
+
+export async function initDb() {
+  await query(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'USER',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS matches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       match_number INTEGER UNIQUE,
       home_team TEXT NOT NULL,
       away_team TEXT NOT NULL,
-      start_time TEXT NOT NULL,
-      match_date TEXT,
+      start_time TIMESTAMPTZ NOT NULL,
+      match_date DATE,
       local_time TEXT,
       timezone TEXT,
-      kickoff_at_utc TEXT,
+      kickoff_at_utc TIMESTAMPTZ,
       stadium TEXT,
       group_name TEXT,
       city TEXT,
@@ -43,139 +60,122 @@ export function initDb() {
       home_score INTEGER,
       away_score INTEGER,
       status TEXT NOT NULL DEFAULT 'SCHEDULED',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS predictions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      match_id INTEGER NOT NULL,
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
       outcome TEXT NOT NULL CHECK(outcome IN ('HOME', 'DRAW', 'AWAY')),
       predicted_home_goals INTEGER NOT NULL,
       predicted_away_goals INTEGER NOT NULL,
       points INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(user_id, match_id),
-      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, match_id)
     );
+
+    CREATE INDEX IF NOT EXISTS idx_matches_start_time ON matches(start_time);
+    CREATE INDEX IF NOT EXISTS idx_predictions_user_id ON predictions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_predictions_match_id ON predictions(match_id);
   `);
 
-  migrateMatchesTable();
-  seedUsers();
-  seedMatches();
-  recalculateAllPoints();
+  await seedUsers();
+  await seedMatches();
+  await recalculateAllPoints();
 }
 
-function migrateMatchesTable() {
-  const columns = db.prepare("PRAGMA table_info(matches)").all().map((column) => column.name);
-  const migrations = [
-    ["match_number", "ALTER TABLE matches ADD COLUMN match_number INTEGER"],
-    ["match_date", "ALTER TABLE matches ADD COLUMN match_date TEXT"],
-    ["local_time", "ALTER TABLE matches ADD COLUMN local_time TEXT"],
-    ["timezone", "ALTER TABLE matches ADD COLUMN timezone TEXT"],
-    ["kickoff_at_utc", "ALTER TABLE matches ADD COLUMN kickoff_at_utc TEXT"],
-    ["city", "ALTER TABLE matches ADD COLUMN city TEXT"],
-    ["stage", "ALTER TABLE matches ADD COLUMN stage TEXT NOT NULL DEFAULT 'Group Stage'"]
-  ];
+async function seedUsers() {
+  const row = await one("SELECT COUNT(*)::int AS count FROM users");
+  if (row.count > 0) return;
 
-  for (const [column, statement] of migrations) {
-    if (!columns.includes(column)) {
-      db.exec(statement);
-    }
-  }
-
-  db.exec("DROP INDEX IF EXISTS idx_matches_match_number");
-  db.exec("CREATE UNIQUE INDEX idx_matches_match_number ON matches(match_number)");
-}
-
-function seedUsers() {
-  const count = db.prepare("SELECT COUNT(*) AS count FROM users").get().count;
-  if (count > 0) return;
-
-  const insert = db.prepare(
-    "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)"
+  await query(
+    "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3), ($4, $5, $6)",
+    [
+      "admin",
+      bcrypt.hashSync(process.env.SEED_ADMIN_PASSWORD ?? "admin123", 10),
+      "ADMIN",
+      "demo",
+      bcrypt.hashSync(process.env.SEED_DEMO_PASSWORD ?? "demo123", 10),
+      "USER"
+    ]
   );
-  insert.run("admin", bcrypt.hashSync("admin123", 10), "ADMIN");
-  insert.run("demo", bcrypt.hashSync("demo123", 10), "USER");
 }
 
-function seedMatches() {
-  const insert = db.prepare(`
-    INSERT INTO matches
-      (
-        match_number,
-        home_team,
-        away_team,
-        start_time,
-        match_date,
-        local_time,
-        timezone,
-        kickoff_at_utc,
-        stadium,
-        group_name,
-        city,
-        stage,
-        home_score,
-        away_score,
-        status
-      )
-    VALUES
-      (
-        @match_number,
-        @home_team,
-        @away_team,
-        @start_time,
-        @match_date,
-        @local_time,
-        @timezone,
-        @kickoff_at_utc,
-        @stadium,
-        @group_name,
-        @city,
-        @stage,
-        NULL,
-        NULL,
-        'SCHEDULED'
-      )
-    ON CONFLICT(match_number) DO UPDATE SET
-      home_team = excluded.home_team,
-      away_team = excluded.away_team,
-      start_time = excluded.start_time,
-      match_date = excluded.match_date,
-      local_time = excluded.local_time,
-      timezone = excluded.timezone,
-      kickoff_at_utc = excluded.kickoff_at_utc,
-      stadium = excluded.stadium,
-      group_name = excluded.group_name,
-      city = excluded.city,
-      stage = excluded.stage,
-      updated_at = CURRENT_TIMESTAMP
-  `);
+async function seedMatches() {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`
+      DELETE FROM predictions
+      WHERE match_id IN (SELECT id FROM matches WHERE match_number IS NULL)
+    `);
+    await client.query("DELETE FROM matches WHERE match_number IS NULL");
 
-  const seedRows = worldCup2026GroupMatches.map((match) => ({
-    ...buildKickoffFields(match.date, match.localTime, getTimezoneForCity(match.city)),
-    match_number: match.matchNumber,
-    home_team: match.homeTeam,
-    away_team: match.awayTeam,
-    stadium: match.stadium,
-    group_name: match.group,
-    city: match.city,
-    stage: match.stage
-  }));
+    for (const match of worldCup2026GroupMatches) {
+      const kickoff = buildKickoffFields(match.date, match.localTime, getTimezoneForCity(match.city));
+      await client.query(
+        `
+          INSERT INTO matches
+            (
+              match_number,
+              home_team,
+              away_team,
+              start_time,
+              match_date,
+              local_time,
+              timezone,
+              kickoff_at_utc,
+              stadium,
+              group_name,
+              city,
+              stage,
+              home_score,
+              away_score,
+              status
+            )
+          VALUES
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, NULL, 'SCHEDULED')
+          ON CONFLICT(match_number) DO UPDATE SET
+            home_team = EXCLUDED.home_team,
+            away_team = EXCLUDED.away_team,
+            start_time = EXCLUDED.start_time,
+            match_date = EXCLUDED.match_date,
+            local_time = EXCLUDED.local_time,
+            timezone = EXCLUDED.timezone,
+            kickoff_at_utc = EXCLUDED.kickoff_at_utc,
+            stadium = EXCLUDED.stadium,
+            group_name = EXCLUDED.group_name,
+            city = EXCLUDED.city,
+            stage = EXCLUDED.stage,
+            updated_at = NOW()
+        `,
+        [
+          match.matchNumber,
+          match.homeTeam,
+          match.awayTeam,
+          kickoff.start_time,
+          kickoff.match_date,
+          kickoff.local_time,
+          kickoff.timezone,
+          kickoff.kickoff_at_utc,
+          match.stadium,
+          match.group,
+          match.city,
+          match.stage
+        ]
+      );
+    }
 
-  const tx = db.transaction((rows) => {
-    db.prepare(
-      `DELETE FROM predictions
-       WHERE match_id IN (SELECT id FROM matches WHERE match_number IS NULL)`
-    ).run();
-    db.prepare("DELETE FROM matches WHERE match_number IS NULL").run();
-
-    rows.forEach((row) => insert.run(row));
-  });
-  tx(seedRows);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export function buildKickoffFields(date, localTime, timezone) {
@@ -220,39 +220,34 @@ export function getTimezoneForCity(city) {
   return timezone;
 }
 
-export function recalculateAllPoints() {
-  const predictions = db
-    .prepare(
-      `SELECT p.*, m.home_score, m.away_score
-       FROM predictions p
-       JOIN matches m ON m.id = p.match_id`
-    )
-    .all();
+export async function recalculateAllPoints() {
+  const predictions = await many(
+    `SELECT p.*, m.home_score, m.away_score
+     FROM predictions p
+     JOIN matches m ON m.id = p.match_id`
+  );
 
-  const update = db.prepare("UPDATE predictions SET points = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-  const tx = db.transaction((rows) => {
-    for (const prediction of rows) {
-      update.run(calculatePredictionPoints(prediction, prediction), prediction.id);
-    }
-  });
-  tx(predictions);
+  for (const prediction of predictions) {
+    await query("UPDATE predictions SET points = $1, updated_at = NOW() WHERE id = $2", [
+      calculatePredictionPoints(prediction, prediction),
+      prediction.id
+    ]);
+  }
 }
 
-export function recalculateMatchPoints(matchId) {
-  const rows = db
-    .prepare(
-      `SELECT p.*, m.home_score, m.away_score
-       FROM predictions p
-       JOIN matches m ON m.id = p.match_id
-       WHERE p.match_id = ?`
-    )
-    .all(matchId);
+export async function recalculateMatchPoints(matchId) {
+  const predictions = await many(
+    `SELECT p.*, m.home_score, m.away_score
+     FROM predictions p
+     JOIN matches m ON m.id = p.match_id
+     WHERE p.match_id = $1`,
+    [matchId]
+  );
 
-  const update = db.prepare("UPDATE predictions SET points = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-  const tx = db.transaction((predictions) => {
-    for (const prediction of predictions) {
-      update.run(calculatePredictionPoints(prediction, prediction), prediction.id);
-    }
-  });
-  tx(rows);
+  for (const prediction of predictions) {
+    await query("UPDATE predictions SET points = $1, updated_at = NOW() WHERE id = $2", [
+      calculatePredictionPoints(prediction, prediction),
+      prediction.id
+    ]);
+  }
 }

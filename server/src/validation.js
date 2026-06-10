@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const registerSchema = z.object({
   username: z.string().trim().min(3).max(32),
@@ -37,3 +37,4 @@ export const resultSchema = z.object({
   homeScore: z.number().int().min(0).max(30),
   awayScore: z.number().int().min(0).max(30)
 });
+

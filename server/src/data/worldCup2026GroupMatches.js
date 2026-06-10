@@ -1,4 +1,4 @@
-export const worldCup2026GroupMatches = [
+﻿export const worldCup2026GroupMatches = [
   { matchNumber: 1, group: "A", homeTeam: "Mexico", awayTeam: "South Africa", date: "2026-06-11", localTime: "13:00", stadium: "Estadio Azteca", city: "Mexico City", stage: "Group Stage" },
   { matchNumber: 2, group: "A", homeTeam: "South Korea", awayTeam: "Czechia", date: "2026-06-11", localTime: "20:00", stadium: "Estadio Akron", city: "Guadalajara", stage: "Group Stage" },
   { matchNumber: 3, group: "B", homeTeam: "Canada", awayTeam: "Bosnia and Herzegovina", date: "2026-06-12", localTime: "15:00", stadium: "BMO Field", city: "Toronto", stage: "Group Stage" },
@@ -72,3 +72,4 @@ export const worldCup2026GroupMatches = [
   { matchNumber: 71, group: "K", homeTeam: "Colombia", awayTeam: "Portugal", date: "2026-06-27", localTime: "19:30", stadium: "Hard Rock Stadium", city: "Miami", stage: "Group Stage" },
   { matchNumber: 72, group: "K", homeTeam: "Congo DR", awayTeam: "Uzbekistan", date: "2026-06-27", localTime: "19:30", stadium: "Mercedes-Benz Stadium", city: "Atlanta", stage: "Group Stage" }
 ];
+

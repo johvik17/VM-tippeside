@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: vm-tippeside-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start --workspace server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_SSL
+        value: true
+      - key: CLIENT_ORIGIN
+        value: https://johvik17.github.io
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_DEMO_PASSWORD
+        sync: false

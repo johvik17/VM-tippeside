@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { db } from "./db.js";
+import { one } from "./db.js";
 
 const jwtSecret = process.env.JWT_SECRET ?? "dev-secret-change-me";
 
@@ -11,7 +11,7 @@ export function signToken(user) {
   );
 }
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
 
@@ -21,9 +21,7 @@ export function requireAuth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, jwtSecret);
-    const user = db
-      .prepare("SELECT id, username, role, created_at FROM users WHERE id = ?")
-      .get(payload.sub);
+    const user = await one("SELECT id, username, role, created_at FROM users WHERE id = $1", [payload.sub]);
 
     if (!user) {
       return res.status(401).json({ message: "Ugyldig brukar." });
