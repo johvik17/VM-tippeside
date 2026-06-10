@@ -289,7 +289,7 @@ function AuthPage({ onAuth }) {
         <div className="world-cup-mark">
           <Trophy size={26} />
         </div>
-        <p className="eyebrow">VM-TIPPE</p>
+        <p className="eyebrow">Familiens VM-Tippekonkurranse</p>
         <h1>{mode === "login" ? "Logg inn" : "Registrer bruker"}</h1>
         <form onSubmit={submit} className="stack">
           <label>

@@ -889,4 +889,111 @@ td {
   .result-row button {
     grid-column: 1 / -1;
   }
+
+  @media (max-width: 480px) {
+  .app-shell {
+    width: calc(100% - 12px);
+    padding-top: 8px;
+    padding-bottom: 96px;
+  }
+
+  .hero,
+  .auth-panel,
+  .match-card,
+  .admin-panel,
+  .table-panel,
+  .feature-panel {
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .hero {
+    min-height: auto;
+  }
+
+  .hero h1,
+  .auth-panel h1 {
+    font-size: 2.1rem;
+    line-height: 1;
+  }
+
+  .hero-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .hero-stats div {
+    min-width: 0;
+  }
+
+  .hero-user {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .day-toolbar {
+    padding: 12px;
+  }
+
+  .day-toolbar .secondary-button {
+    width: 100%;
+  }
+
+  .date-strip button {
+    min-width: 78px;
+    padding: 9px 10px;
+  }
+
+  .match-card-top,
+  .score-line,
+  .kickoff-row {
+    flex-wrap: wrap;
+  }
+
+  .flag {
+    font-size: 1.7rem;
+  }
+
+  .team-block strong {
+    font-size: 1.25rem;
+  }
+
+  .vs-chip {
+    width: 40px;
+    height: 40px;
+  }
+
+  .segmented button {
+    min-height: 44px;
+  }
+
+  input,
+  .primary-button,
+  .secondary-button {
+    min-height: 44px;
+  }
+
+  th,
+  td {
+    padding: 10px 8px;
+    font-size: 0.85rem;
+  }
+
+  .tabs {
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .tabs button {
+    min-width: 50px;
+    font-size: 0.68rem;
+  }
+}
 }
