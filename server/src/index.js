@@ -340,8 +340,8 @@ app.get(
          u.username,
          COALESCE(SUM(p.points), 0)::int AS total_points,
          COUNT(p.id)::int AS predictions_count,
-         COALESCE(SUM(CASE WHEN p.points = 5 THEN 1 ELSE 0 END), 0)::int AS perfect_tips,
-         COALESCE(SUM(CASE WHEN p.points = 5 THEN 2 ELSE 0 END), 0)::int AS bonus_points
+         COALESCE(SUM(CASE WHEN p.points = 3 THEN 1 ELSE 0 END), 0)::int AS perfect_tips,
+         COALESCE(SUM(CASE WHEN p.points = 3 THEN 2 ELSE 0 END), 0)::int AS bonus_points
        FROM users u
        LEFT JOIN predictions p ON p.user_id = u.id
        WHERE u.role != 'ADMIN'

@@ -555,7 +555,7 @@ function MatchCard({ match, prediction, onSaved, onError }) {
   }
 
   return (
-    <article className={`match-card ${prediction?.points === 5 ? "perfect-score" : ""}`}>
+    <article className={`match-card ${prediction?.points === 3 ? "perfect-score" : ""}`}>
       <div className="match-card-top">
         <span>#{match.matchNumber} - Gruppe {match.groupName || "VM"}</span>
         <span className={`status-pill ${statusClass}`}>{statusLabel}</span>
@@ -960,9 +960,9 @@ function FriendsPanel() {
       <section className="info-section">
         <h3>Poeng for kamptips</h3>
         <ul>
-          <li><strong>3 poeng</strong> for riktig HUB-tips.</li>
-          <li><strong>2 bonuspoeng</strong> for helt riktig resultat.</li>
-          <li><strong>5 poeng maks</strong> per kamp.</li>
+          <li><strong>1 poeng</strong> for riktig HUB-tips.</li>
+          <li><strong>2 poeng</strong> for helt riktig resultat.</li>
+          <li><strong>3 poeng maks</strong> per kamp.</li>
         </ul>
       </section>
 
