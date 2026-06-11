@@ -5,6 +5,7 @@ const THIRTY_MINUTES = 30 * 60 * 1000;
 const provider = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase();
 const apiKey = process.env.FOOTBALL_API_KEY?.trim();
 const baseUrl = process.env.FOOTBALL_API_BASE_URL?.trim();
+const scoreSyncEnabled = process.env.FOOTBALL_SCORE_SYNC_ENABLED === "true";
 const competitionId =
   process.env.FOOTBALL_API_COMPETITION_ID?.trim() ??
   (provider === "api-football" || provider === "apisports" ? "1" : null) ??
@@ -21,6 +22,11 @@ let requestCount = 0;
 let requestCountDate = currentDate();
 
 export function startScorePolling() {
+  if (!scoreSyncEnabled) {
+    console.log("[scores] disabled by configuration");
+    return;
+  }
+
   if (!provider || !apiKey || !baseUrl) {
     console.log("[scores] Automatic score polling disabled. Set FOOTBALL_API_PROVIDER, FOOTBALL_API_KEY and FOOTBALL_API_BASE_URL.");
     return;
@@ -40,6 +46,11 @@ export function startScorePolling() {
 }
 
 export async function syncScores() {
+  if (!scoreSyncEnabled) {
+    console.log("[scores] disabled by configuration");
+    return;
+  }
+
   if (syncInProgress) {
     console.log("[scores] Previous sync still running, skipping this tick.");
     scheduleNextSync(idlePollMs);
@@ -122,6 +133,8 @@ async function loadLocalMatchesForDate(date) {
 }
 
 export async function testScoreSync(date = currentDate()) {
+  if (!scoreSyncEnabled) return disabledScoreSyncResponse();
+
   const response = await requestFixtures(date);
   requestCount += 1;
 
@@ -140,6 +153,8 @@ export async function testScoreSync(date = currentDate()) {
 }
 
 export async function rawTestScoreSync() {
+  if (!scoreSyncEnabled) return disabledScoreSyncResponse();
+
   const response = await requestApiFootballRawFixtures(apiFootballGuideFixtureUrl);
   requestCount += 1;
 
@@ -149,6 +164,14 @@ export async function rawTestScoreSync() {
     errors: response.errors,
     responseLength: response.responseLength,
     fixtures: response.response.slice(0, 2)
+  };
+}
+
+function disabledScoreSyncResponse() {
+  console.log("[scores] disabled by configuration");
+  return {
+    enabled: false,
+    message: "Score sync is disabled by FOOTBALL_SCORE_SYNC_ENABLED."
   };
 }
 

@@ -318,10 +318,23 @@ th {
   margin: 0;
 }
 
+.success {
+  color: #8fe8c0;
+  margin: 0;
+  font-weight: 800;
+}
+
 .auth-panel {
   width: min(450px, 100%);
   padding: 28px;
   border-radius: 26px;
+}
+
+.auth-help {
+  margin: 12px 0 0;
+  color: #9fb1c6;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .stack {
@@ -939,6 +952,32 @@ td {
   font-size: 0.85rem;
 }
 
+.user-admin-list {
+  display: grid;
+  gap: 10px;
+}
+
+.user-admin-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(190px, 280px) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.user-admin-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.user-admin-row span {
+  color: #9fb1c6;
+  font-size: 0.85rem;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1090,6 +1129,10 @@ td {
 
   .result-row button {
     grid-column: 1 / -1;
+  }
+
+  .user-admin-row {
+    grid-template-columns: 1fr;
   }
 
   @media (max-width: 480px) {

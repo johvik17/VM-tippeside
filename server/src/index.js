@@ -22,6 +22,7 @@ import {
   extraPredictionSchema,
   extraResultSchema,
   matchSchema,
+  passwordResetSchema,
   predictionSchema,
   registerSchema,
   resultSchema
@@ -371,6 +372,39 @@ app.get(
   })
 );
 
+app.get(
+  "/api/admin/users",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const users = await many(
+      `SELECT id, username, role, created_at
+       FROM users
+       ORDER BY lower(username) ASC`
+    );
+
+    res.json({ users: users.map(mapUser) });
+  })
+);
+
+app.put(
+  "/api/admin/users/:id/password",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = passwordResetSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Passordet maa vere minst 4 teikn." });
+    }
+
+    const passwordHash = bcrypt.hashSync(parsed.data.newPassword, 10);
+    const result = await query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, req.params.id]);
+
+    if (result.rowCount === 0) return res.status(404).json({ message: "Brukaren finst ikkje." });
+    res.json({ success: true });
+  })
+);
+
 app.post(
   "/api/admin/matches",
   requireAuth,
@@ -579,6 +613,15 @@ app.listen(port, () => {
   console.log(`VM-tippe API køyrer på port ${port}`);
   startScorePolling();
 });
+
+function mapUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    createdAt: toIso(user.created_at)
+  };
+}
 
 function mapMatch(match) {
   const predictionDeadline = getPredictionDeadline(match);

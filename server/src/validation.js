@@ -10,6 +10,10 @@ export const loginSchema = z.object({
   password: z.string().min(1)
 });
 
+export const passwordResetSchema = z.object({
+  newPassword: z.string().min(4).max(128)
+});
+
 export const predictionSchema = z.object({
   matchId: z.number().int().positive(),
   outcome: z.enum(["HOME", "DRAW", "AWAY"]),

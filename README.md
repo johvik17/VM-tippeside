@@ -32,6 +32,7 @@ skal berre ligge på backend, aldri i frontend.
 Miljøvariablar:
 
 ```bash
+FOOTBALL_SCORE_SYNC_ENABLED=false
 FOOTBALL_API_PROVIDER=api-football
 FOOTBALL_API_KEY=your-football-api-key
 FOOTBALL_API_COMPETITION_ID=1
@@ -41,6 +42,11 @@ FOOTBALL_SCORE_IDLE_POLL_MS=1800000
 FOOTBALL_SCORE_LIVE_POLL_MS=60000
 FOOTBALL_API_DAILY_LIMIT=90
 ```
+
+Automatisk score-sync er av som standard. Set `FOOTBALL_SCORE_SYNC_ENABLED=true`
+for aa aktivere polling mot ekstern fotball-API. Naar flagget manglar eller er
+`false`, loggar serveren `[scores] disabled by configuration` og sender ingen
+eksterne score-kall.
 
 Score-jobben held seg innanfor gratisnivå:
 
@@ -85,6 +91,12 @@ database.
 - Admin: `admin` / verdien i `SEED_ADMIN_PASSWORD`, eller `admin123` lokalt
 - Brukar: `demo` / verdien i `SEED_DEMO_PASSWORD`, eller `demo123` lokalt
 
+## Glemt passord
+
+Passord blir aldri vist eller lagra i plaintext. Ein admin kan gaa til
+`Admin -> Brukere og passord`, velje ein brukar, og setje eit nytt midlertidig
+passord. Brukaren kan deretter logge inn med det nye passordet.
+
 ## Produksjon
 
 Produksjonsoppsettet er delt i tre:
@@ -127,6 +139,7 @@ CLIENT_ORIGIN=https://johvik17.github.io
 SEED_ADMIN_PASSWORD=vel-eit-sterkt-passord
 SEED_DEMO_PASSWORD=vel-eit-sterkt-passord
 EXTRA_TIPS_DEADLINE=2026-06-14T16:00:00+02:00
+FOOTBALL_SCORE_SYNC_ENABLED=false
 FOOTBALL_API_PROVIDER=api-football
 FOOTBALL_API_KEY=din-api-nokkel
 FOOTBALL_API_COMPETITION_ID=1

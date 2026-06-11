@@ -395,6 +395,9 @@ function AuthPage({ onAuth }) {
         <button className="text-button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
           {mode === "login" ? "Ny bruker? Registrer deg" : "Har du bruker? Logg inn"}
         </button>
+        {mode === "login" && (
+          <p className="auth-help">Glemt passord? Kontakt admin for nytt midlertidig passord.</p>
+        )}
       </section>
     </main>
   );
@@ -987,6 +990,31 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
   const [form, setForm] = useState(emptyMatchForm);
   const [scoreSyncTest, setScoreSyncTest] = useState(null);
   const [scoreSyncLoading, setScoreSyncLoading] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [passwordsByUser, setPasswordsByUser] = useState({});
+  const [passwordMessage, setPasswordMessage] = useState("");
+
+  useEffect(() => {
+    async function loadUsers() {
+      try {
+        const data = await apiRequest("/admin/users");
+        setUsers(data.users ?? []);
+      } catch (error) {
+        onError(error.message);
+      }
+    }
+
+    loadUsers();
+  }, [onError]);
+
+  async function refreshUsers() {
+    try {
+      const data = await apiRequest("/admin/users");
+      setUsers(data.users ?? []);
+    } catch (error) {
+      onError(error.message);
+    }
+  }
 
   async function createMatch(event) {
     event.preventDefault();
@@ -1014,6 +1042,21 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
       onError(error.message);
     } finally {
       setScoreSyncLoading(false);
+    }
+  }
+
+  async function resetUserPassword(userId) {
+    setPasswordMessage("");
+    try {
+      await apiRequest(`/admin/users/${userId}/password`, {
+        method: "PUT",
+        body: JSON.stringify({ newPassword: passwordsByUser[userId] ?? "" })
+      });
+      setPasswordsByUser((current) => ({ ...current, [userId]: "" }));
+      setPasswordMessage("Passordet er oppdatert.");
+      await refreshUsers();
+    } catch (error) {
+      onError(error.message);
     }
   }
 
@@ -1049,6 +1092,39 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
         <button type="button" className="secondary-button" onClick={() => testFootballApi("/admin/score-sync/raw-test")} disabled={scoreSyncLoading}>
           Raw API test
         </button>
+      </section>
+      <section className="admin-panel wide">
+        <h2>
+          <Users size={20} />
+          Brukere og passord
+        </h2>
+        <p className="muted">Sett et nytt midlertidig passord hvis noen har glemt sitt. Passord vises aldri etter lagring.</p>
+        {passwordMessage && <p className="success">{passwordMessage}</p>}
+        <div className="user-admin-list">
+          {users.map((user) => (
+            <div className="user-admin-row" key={user.id}>
+              <div>
+                <strong>{user.username}</strong>
+                <span>{user.role} | Opprettet {formatTimestamp(user.createdAt)}</span>
+              </div>
+              <input
+                type="password"
+                minLength={4}
+                placeholder="Nytt midlertidig passord"
+                value={passwordsByUser[user.id] ?? ""}
+                onChange={(event) => setPasswordsByUser((current) => ({ ...current, [user.id]: event.target.value }))}
+              />
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => resetUserPassword(user.id)}
+                disabled={(passwordsByUser[user.id] ?? "").length < 4}
+              >
+                Sett nytt passord
+              </button>
+            </div>
+          ))}
+        </div>
       </section>
       <ExtraResultAdmin extraResult={extraResult} onChanged={onChanged} onError={onError} />
       <section className="admin-panel wide">
