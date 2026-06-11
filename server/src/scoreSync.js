@@ -13,6 +13,7 @@ const season = process.env.FOOTBALL_API_SEASON?.trim() ?? "2026";
 const livePollMs = Number(process.env.FOOTBALL_SCORE_LIVE_POLL_MS ?? ONE_MINUTE);
 const idlePollMs = Number(process.env.FOOTBALL_SCORE_IDLE_POLL_MS ?? THIRTY_MINUTES);
 const dailyRequestLimit = Number(process.env.FOOTBALL_API_DAILY_LIMIT ?? 90);
+const apiFootballGuideFixtureUrl = "https://v3.football.api-sports.io/fixtures?league=1&season=2026";
 
 let syncInProgress = false;
 let timeoutId = null;
@@ -130,9 +131,24 @@ export async function testScoreSync(date = currentDate()) {
     competitionId,
     season,
     statusCode: response.statusCode,
-    fixtureCount: response.fixtures.length,
+    fixtureCount: response.responseLength,
+    results: response.results,
+    errors: response.errors,
     sampleCompetition: response.competitionNames[0] ?? null,
     sampleFixture: response.fixtures[0] ?? null
+  };
+}
+
+export async function rawTestScoreSync() {
+  const response = await requestApiFootballRawFixtures(apiFootballGuideFixtureUrl);
+  requestCount += 1;
+
+  return {
+    statusCode: response.statusCode,
+    results: response.results,
+    errors: response.errors,
+    responseLength: response.responseLength,
+    fixtures: response.response.slice(0, 2)
   };
 }
 
@@ -151,27 +167,71 @@ async function requestFixtures(date) {
     return {
       ok: false,
       statusCode: response.status,
+      results: null,
+      errors: body,
       fixtures: [],
       competitionNames: [],
-      firstFixtureDate: null
+      firstFixtureDate: null,
+      responseLength: 0
     };
   }
 
   const data = await response.json();
+  logJsonShape(data);
   const fixtures = normalizeFixtures(data);
   const competitionNames = [...new Set(fixtures.map((fixture) => fixture.competitionName).filter(Boolean))];
   const firstFixtureDate = fixtures[0]?.date ?? null;
+  const errors = readApiErrors(data);
+  const results = readApiResults(data);
+  const responseLength = readApiResponseLength(data, fixtures);
 
-  console.log(`[scores] fixture count returned: ${fixtures.length}`);
+  console.log(`[scores] fixture count returned: ${responseLength}`);
   console.log(`[scores] competition names returned: ${competitionNames.length ? competitionNames.join(", ") : "-"}`);
   console.log(`[scores] first fixture date: ${firstFixtureDate ?? "-"}`);
+  if (hasApiErrors(errors)) {
+    console.error(`[scores] API errors: ${JSON.stringify(errors)}`);
+  }
 
   return {
     ok: true,
     statusCode: response.status,
+    results,
+    errors,
     fixtures,
     competitionNames,
-    firstFixtureDate
+    firstFixtureDate,
+    responseLength
+  };
+}
+
+async function requestApiFootballRawFixtures(url) {
+  console.log(`[scores] requesting: ${sanitizeUrl(url)}`);
+
+  const response = await fetch(url, {
+    headers: { "x-apisports-key": process.env.FOOTBALL_API_KEY }
+  });
+  console.log(`[scores] response status: ${response.status}`);
+
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { errors: { parse: "API response was not valid JSON" }, rawBody: text };
+  }
+
+  if (!response.ok) {
+    console.error(`[scores] response body: ${text}`);
+  } else {
+    logJsonShape(data);
+  }
+
+  return {
+    statusCode: response.status,
+    results: data.results ?? null,
+    errors: readApiErrors(data),
+    responseLength: Array.isArray(data.response) ? data.response.length : 0,
+    response: Array.isArray(data.response) ? data.response : []
   };
 }
 
@@ -198,6 +258,46 @@ function buildFixtureUrl(date) {
   return url.toString();
 }
 
+function logJsonShape(data) {
+  const responseValue = data?.response;
+  const responseLength = Array.isArray(responseValue) ? responseValue.length : 0;
+  const firstFixture = Array.isArray(responseValue) ? responseValue[0] : null;
+  const shape = {
+    keys: data && typeof data === "object" ? Object.keys(data) : [],
+    results: data?.results ?? null,
+    responseLength,
+    errors: data?.errors ?? null,
+    firstFixtureKeys: firstFixture && typeof firstFixture === "object" ? Object.keys(firstFixture) : []
+  };
+
+  console.log(`[scores] API-Football JSON shape: ${JSON.stringify(shape)}`);
+}
+
+function readApiResults(data) {
+  if (provider === "api-football" || provider === "apisports") {
+    return data?.results ?? null;
+  }
+  return null;
+}
+
+function readApiErrors(data) {
+  return data?.errors ?? null;
+}
+
+function readApiResponseLength(data, normalizedFixtures) {
+  if ((provider === "api-football" || provider === "apisports") && Array.isArray(data?.response)) {
+    return data.response.length;
+  }
+  return normalizedFixtures.length;
+}
+
+function hasApiErrors(errors) {
+  if (!errors) return false;
+  if (Array.isArray(errors)) return errors.length > 0;
+  if (typeof errors === "object") return Object.keys(errors).length > 0;
+  return Boolean(errors);
+}
+
 function sanitizeUrl(urlValue) {
   if (!urlValue) return urlValue;
 
@@ -217,7 +317,7 @@ function sanitizeUrl(urlValue) {
 
 function buildHeaders() {
   if (provider === "api-football" || provider === "apisports") {
-    return { "x-apisports-key": apiKey };
+    return { "x-apisports-key": process.env.FOOTBALL_API_KEY };
   }
 
   if (provider === "football-data" || provider === "football-data.org") {

@@ -26,7 +26,7 @@ import {
   registerSchema,
   resultSchema
 } from "./validation.js";
-import { startScorePolling, testScoreSync } from "./scoreSync.js";
+import { rawTestScoreSync, startScorePolling, testScoreSync } from "./scoreSync.js";
 
 await initDb();
 
@@ -544,6 +544,16 @@ app.get(
   requireAdmin,
   asyncHandler(async (_req, res) => {
     const result = await testScoreSync();
+    res.json(result);
+  })
+);
+
+app.get(
+  "/api/admin/score-sync/raw-test",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const result = await rawTestScoreSync();
     res.json(result);
   })
 );

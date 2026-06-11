@@ -1005,10 +1005,10 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
     }
   }
 
-  async function testFootballApi() {
+  async function testFootballApi(endpoint = "/admin/score-sync/test") {
     setScoreSyncLoading(true);
     try {
-      const data = await apiRequest("/admin/score-sync/test");
+      const data = await apiRequest(endpoint);
       setScoreSyncTest(data);
     } catch (error) {
       onError(error.message);
@@ -1043,8 +1043,11 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
           Football API
         </h2>
         <p className="muted">Test score-sync uten å eksponere API-nøkkelen.</p>
-        <button type="button" className="secondary-button" onClick={testFootballApi} disabled={scoreSyncLoading}>
+        <button type="button" className="secondary-button" onClick={() => testFootballApi()} disabled={scoreSyncLoading}>
           {scoreSyncLoading ? "Tester..." : "Test Football API"}
+        </button>
+        <button type="button" className="secondary-button" onClick={() => testFootballApi("/admin/score-sync/raw-test")} disabled={scoreSyncLoading}>
+          Raw API test
         </button>
       </section>
       <ExtraResultAdmin extraResult={extraResult} onChanged={onChanged} onError={onError} />
