@@ -35,6 +35,7 @@ const __dirname = path.dirname(__filename);
 const clientDistPath = path.resolve(__dirname, "../../client/dist");
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
+const extraTipsDeadline = process.env.EXTRA_TIPS_DEADLINE ?? "2026-06-14T16:00:00+02:00";
 
 const allowedOrigins = (process.env.CLIENT_ORIGIN ?? "http://localhost:5173,http://localhost:4173")
   .split(",")
@@ -190,7 +191,7 @@ app.get(
   asyncHandler(async (_req, res) => {
     const lock = await getExtraLockMeta();
     if (!lock.isLocked) {
-      return res.status(423).json({ message: "Ekstra tips blir offentlege når første VM-kamp er låst." });
+      return res.status(423).json({ message: "Ekstra tips blir offentlege når fristen er passert." });
     }
 
     const predictions = await many(
@@ -210,7 +211,7 @@ app.put(
   asyncHandler(async (req, res) => {
     const lock = await getExtraLockMeta();
     if (lock.isLocked) {
-      return res.status(423).json({ message: "Ekstra tips er låst etter første VM-kampstart." });
+      return res.status(423).json({ message: "Ekstra tips er låst etter fristen." });
     }
 
     const parsed = extraPredictionSchema.safeParse(req.body);
@@ -624,13 +625,13 @@ function mapPublicPrediction(prediction) {
 }
 
 async function getExtraLockMeta() {
-  const firstMatch = await one("SELECT start_time FROM matches ORDER BY start_time ASC LIMIT 1");
-  const deadline = firstMatch?.start_time ? new Date(firstMatch.start_time) : null;
+  const deadline = new Date(extraTipsDeadline);
+  const validDeadline = Number.isNaN(deadline.getTime()) ? null : deadline;
 
   return {
-    deadline: deadline ? deadline.toISOString() : null,
+    deadline: validDeadline ? validDeadline.toISOString() : null,
     serverTime: new Date().toISOString(),
-    isLocked: deadline ? Date.now() >= deadline.getTime() : false
+    isLocked: validDeadline ? Date.now() >= validDeadline.getTime() : false
   };
 }
 

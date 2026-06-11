@@ -813,7 +813,7 @@ function ExtraTipsPage({ prediction, lock, publicPredictions, onSaved, onError }
           <p className="muted">
             {isLocked
               ? "Ekstra tips er låst. Alle brukeres tips er nå synlige."
-              : `Kun for gøy. Teller ikke på leaderboardet. Kan endres frem til første VM-kamp${lock?.deadline ? `: ${formatTimestamp(lock.deadline)}` : "."}`}
+              : `Kun for gøy. Teller ikke på leaderboardet. Kan endres frem til fristen${lock?.deadline ? `: ${formatTimestamp(lock.deadline)}` : "."}`}
           </p>
         </div>
         <div className={`status-pill ${isLocked ? "locked" : "open"}`}>{isLocked ? "Låst" : "Åpen"}</div>

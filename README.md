@@ -126,6 +126,7 @@ JWT_SECRET=ein-lang-tilfeldig-hemmelighet
 CLIENT_ORIGIN=https://johvik17.github.io
 SEED_ADMIN_PASSWORD=vel-eit-sterkt-passord
 SEED_DEMO_PASSWORD=vel-eit-sterkt-passord
+EXTRA_TIPS_DEADLINE=2026-06-14T16:00:00+02:00
 FOOTBALL_API_PROVIDER=api-football
 FOOTBALL_API_KEY=din-api-nokkel
 FOOTBALL_API_COMPETITION_ID=1
@@ -184,3 +185,8 @@ https://johvik17.github.io/VM-tippeside/
 - Automatisk poengutrekning
 - Automatisk resultatoppdatering via backend-jobb
 - Leaderboard med rangering
+
+## Ekstra Tips-Frist
+
+Ekstra tips låses av `EXTRA_TIPS_DEADLINE`. Standard i prosjektet er
+`2026-06-14T16:00:00+02:00`, altså søndag 14. juni 2026 kl. 16:00 norsk tid.

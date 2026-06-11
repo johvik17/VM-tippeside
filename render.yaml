@@ -21,6 +21,8 @@ services:
         sync: false
       - key: SEED_DEMO_PASSWORD
         sync: false
+      - key: EXTRA_TIPS_DEADLINE
+        value: 2026-06-14T16:00:00+02:00
       - key: FOOTBALL_API_PROVIDER
         value: api-football
       - key: FOOTBALL_API_KEY
