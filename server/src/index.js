@@ -26,7 +26,7 @@ import {
   registerSchema,
   resultSchema
 } from "./validation.js";
-import { startScorePolling } from "./scoreSync.js";
+import { startScorePolling, testScoreSync } from "./scoreSync.js";
 
 await initDb();
 
@@ -535,6 +535,16 @@ app.put(
 
     await recalculateAllExtraPoints();
     res.json({ result: mapExtraResult(result) });
+  })
+);
+
+app.get(
+  "/api/admin/score-sync/test",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const result = await testScoreSync();
+    res.json(result);
   })
 );
 

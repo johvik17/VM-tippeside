@@ -985,6 +985,8 @@ function FriendsPanel() {
 }
 function AdminPage({ matches, extraResult, onChanged, onError }) {
   const [form, setForm] = useState(emptyMatchForm);
+  const [scoreSyncTest, setScoreSyncTest] = useState(null);
+  const [scoreSyncLoading, setScoreSyncLoading] = useState(false);
 
   async function createMatch(event) {
     event.preventDefault();
@@ -1000,6 +1002,18 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
       await onChanged();
     } catch (error) {
       onError(error.message);
+    }
+  }
+
+  async function testFootballApi() {
+    setScoreSyncLoading(true);
+    try {
+      const data = await apiRequest("/admin/score-sync/test");
+      setScoreSyncTest(data);
+    } catch (error) {
+      onError(error.message);
+    } finally {
+      setScoreSyncLoading(false);
     }
   }
 
@@ -1023,6 +1037,16 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
           <button className="primary-button">Legg til kamp</button>
         </form>
       </section>
+      <section className="admin-panel">
+        <h2>
+          <ShieldCheck size={20} />
+          Football API
+        </h2>
+        <p className="muted">Test score-sync uten å eksponere API-nøkkelen.</p>
+        <button type="button" className="secondary-button" onClick={testFootballApi} disabled={scoreSyncLoading}>
+          {scoreSyncLoading ? "Tester..." : "Test Football API"}
+        </button>
+      </section>
       <ExtraResultAdmin extraResult={extraResult} onChanged={onChanged} onError={onError} />
       <section className="admin-panel wide">
         <h2>Alle gruppespillkamper og resultat</h2>
@@ -1032,6 +1056,17 @@ function AdminPage({ matches, extraResult, onChanged, onError }) {
           ))}
         </div>
       </section>
+      {scoreSyncTest && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setScoreSyncTest(null)}>
+          <section className="debug-modal" role="dialog" aria-modal="true" aria-label="Football API test" onClick={(event) => event.stopPropagation()}>
+            <div className="debug-modal-header">
+              <h2>Football API test</h2>
+              <button className="icon-button" onClick={() => setScoreSyncTest(null)} aria-label="Lukk">X</button>
+            </div>
+            <pre>{JSON.stringify(scoreSyncTest, null, 2)}</pre>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

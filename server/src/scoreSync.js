@@ -25,6 +25,10 @@ export function startScorePolling() {
     return;
   }
 
+  console.log(`[scores] provider: ${provider}`);
+  console.log(`[scores] base URL: ${sanitizeUrl(baseUrl)}`);
+  console.log(`[scores] competition ID: ${competitionId ?? "strict-name-filter"}`);
+  console.log(`[scores] season: ${season}`);
   console.log(
     `[scores] Starting ${provider} score polling. idle=${Math.round(idlePollMs / 1000)}s live=${Math.round(
       livePollMs / 1000
@@ -64,8 +68,12 @@ export async function syncScores() {
     console.log(hasLiveBeforeFetch ? "[scores] live polling" : "[scores] idle polling");
 
     console.log("[scores] fetching FIFA World Cup fixtures only");
-    const apiFixtures = await fetchFixtures(today);
+    const response = await requestFixtures(today);
     requestCount += 1;
+    if (!response.ok) {
+      throw new Error(`Football API returned ${response.statusCode}`);
+    }
+    const apiFixtures = response.fixtures;
 
     const worldCupFixtures = apiFixtures.filter(isWorldCupFixture);
     const updates = matchFixtures(localMatches, worldCupFixtures);
@@ -112,18 +120,59 @@ async function loadLocalMatchesForDate(date) {
   );
 }
 
-async function fetchFixtures(date) {
-  const response = await fetch(buildFixtureUrl(date), {
+export async function testScoreSync(date = currentDate()) {
+  const response = await requestFixtures(date);
+  requestCount += 1;
+
+  return {
+    provider,
+    baseUrl: sanitizeUrl(baseUrl),
+    competitionId,
+    season,
+    statusCode: response.statusCode,
+    fixtureCount: response.fixtures.length,
+    sampleCompetition: response.competitionNames[0] ?? null,
+    sampleFixture: response.fixtures[0] ?? null
+  };
+}
+
+async function requestFixtures(date) {
+  const url = buildFixtureUrl(date);
+  console.log(`[scores] requesting: ${sanitizeUrl(url)}`);
+
+  const response = await fetch(url, {
     headers: buildHeaders()
   });
+  console.log(`[scores] response status: ${response.status}`);
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`Football API returned ${response.status}: ${body.slice(0, 200)}`);
+    console.error(`[scores] response body: ${body}`);
+    return {
+      ok: false,
+      statusCode: response.status,
+      fixtures: [],
+      competitionNames: [],
+      firstFixtureDate: null
+    };
   }
 
   const data = await response.json();
-  return normalizeFixtures(data);
+  const fixtures = normalizeFixtures(data);
+  const competitionNames = [...new Set(fixtures.map((fixture) => fixture.competitionName).filter(Boolean))];
+  const firstFixtureDate = fixtures[0]?.date ?? null;
+
+  console.log(`[scores] fixture count returned: ${fixtures.length}`);
+  console.log(`[scores] competition names returned: ${competitionNames.length ? competitionNames.join(", ") : "-"}`);
+  console.log(`[scores] first fixture date: ${firstFixtureDate ?? "-"}`);
+
+  return {
+    ok: true,
+    statusCode: response.status,
+    fixtures,
+    competitionNames,
+    firstFixtureDate
+  };
 }
 
 function buildFixtureUrl(date) {
@@ -147,6 +196,23 @@ function buildFixtureUrl(date) {
     url.searchParams.set("date", date);
   }
   return url.toString();
+}
+
+function sanitizeUrl(urlValue) {
+  if (!urlValue) return urlValue;
+
+  try {
+    const url = new URL(urlValue);
+    for (const key of ["key", "api_key", "apikey", "api-key", "token", "auth_token", "x-apisports-key"]) {
+      if (url.searchParams.has(key)) url.searchParams.set(key, "[redacted]");
+    }
+    return url.toString();
+  } catch {
+    return urlValue.replace(
+      /([?&](?:key|api_key|apikey|api-key|token|auth_token|x-apisports-key)=)[^&{}]+/gi,
+      "$1[redacted]"
+    );
+  }
 }
 
 function buildHeaders() {
