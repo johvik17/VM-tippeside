@@ -362,6 +362,7 @@ function isWorldCupFixture(fixture) {
 function matchFixtures(localMatches, apiFixtures) {
   const byMatchNumber = new Map();
   const byTeams = new Map();
+  const matchedFixtureKeys = new Set();
 
   for (const fixture of apiFixtures) {
     if (fixture.matchNumber) byMatchNumber.set(Number(fixture.matchNumber), fixture);
@@ -373,15 +374,29 @@ function matchFixtures(localMatches, apiFixtures) {
     }
   }
 
-  return localMatches
+  const updates = localMatches
     .map((match) => {
       const fixture =
         (match.match_number ? byMatchNumber.get(Number(match.match_number)) : null) ??
         findTeamFixture(byTeams.get(buildTeamsKey(match.home_team, match.away_team)), match);
 
-      return fixture ? { match, fixture } : null;
+      if (!fixture) return null;
+
+      matchedFixtureKeys.add(getFixtureLogKey(fixture));
+      logMatchedFixture(fixture, match);
+      return { match, fixture };
     })
     .filter(Boolean);
+
+  for (const fixture of apiFixtures) {
+    if (!matchedFixtureKeys.has(getFixtureLogKey(fixture))) {
+      console.log(
+        `[scores] skipped because no local match found: API: ${formatFixtureTeams(fixture)} date=${fixture.date ?? "-"}`
+      );
+    }
+  }
+
+  return updates;
 }
 
 function findTeamFixture(fixtures = [], match) {
@@ -401,13 +416,22 @@ async function updateMatchFromFixture(match, fixture) {
   const nextHomeScore = fixture.homeScore;
   const nextAwayScore = fixture.awayScore;
 
+  if (match.status === "FINISHED" && nextStatus === "FINISHED" && nextHomeScore === match.home_score && nextAwayScore === match.away_score) {
+    console.log(`[scores] skipped because already FINISHED: matchId=${match.id} ${formatLocalTeams(match)}`);
+    return;
+  }
+
   if (!nextStatus || (nextHomeScore === null && nextAwayScore === null && nextStatus === match.status)) {
+    console.log(`[scores] skipped because score already identical: matchId=${match.id} ${formatLocalTeams(match)}`);
     return;
   }
 
   const scoreChanged = nextHomeScore !== match.home_score || nextAwayScore !== match.away_score;
   const statusChanged = nextStatus !== match.status;
-  if (!scoreChanged && !statusChanged) return;
+  if (!scoreChanged && !statusChanged) {
+    console.log(`[scores] skipped because score already identical: matchId=${match.id} ${formatLocalTeams(match)}`);
+    return;
+  }
 
   await query(
     `UPDATE matches
@@ -460,6 +484,24 @@ function normalizeStatus(status) {
 
 function buildTeamsKey(homeTeam, awayTeam) {
   return `${normalizeTeam(homeTeam)}|${normalizeTeam(awayTeam)}`;
+}
+
+function getFixtureLogKey(fixture) {
+  return `${fixture.matchNumber ?? ""}|${fixture.kickoffAt ?? fixture.date ?? ""}|${buildTeamsKey(fixture.homeTeam, fixture.awayTeam)}`;
+}
+
+function logMatchedFixture(fixture, match) {
+  console.log(
+    `[scores] matched:\nAPI: ${formatFixtureTeams(fixture)}\nLOCAL: ${formatLocalTeams(match)}\nmatchId=${match.id}`
+  );
+}
+
+function formatFixtureTeams(fixture) {
+  return `${fixture.homeTeam ?? "-"} vs ${fixture.awayTeam ?? "-"}`;
+}
+
+function formatLocalTeams(match) {
+  return `${match.home_team ?? "-"} vs ${match.away_team ?? "-"}`;
 }
 
 function normalizeTeam(team) {
