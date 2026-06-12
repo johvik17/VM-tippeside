@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CalendarPlus,
@@ -164,12 +164,22 @@ export function App() {
       .sort((a, b) => new Date(a.kickoffAtUtc || a.startTime) - new Date(b.kickoffAtUtc || b.startTime))[0];
   }, [matches]);
 
-  useEffect(() => {
-    if (!user) return;
-    refreshData();
-  }, [user]);
+  const hasLiveMatch = useMemo(() => matches.some((match) => match.status === "LIVE"), [matches]);
 
-  async function refreshData() {
+  const refreshLiveData = useCallback(async () => {
+    try {
+      const [matchesData, leaderboardData] = await Promise.all([
+        apiRequest("/matches"),
+        apiRequest("/leaderboard")
+      ]);
+      setMatches(matchesData.matches);
+      setLeaderboard(leaderboardData.leaderboard);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }, []);
+
+  const refreshData = useCallback(async () => {
     setLoading(true);
     try {
       const [matchesData, predictionsData, extraData, leaderboardData] = await Promise.all([
@@ -196,7 +206,23 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    refreshData();
+  }, [refreshData, user]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const intervalMs = hasLiveMatch ? 15000 : matches.length > 0 ? 60000 : 30000;
+    const timerId = window.setInterval(() => {
+      refreshLiveData();
+    }, intervalMs);
+
+    return () => window.clearInterval(timerId);
+  }, [hasLiveMatch, matches.length, refreshLiveData, user]);
 
   function handleAuth({ token, user: nextUser }) {
     localStorage.setItem("vmTippeToken", token);
@@ -227,6 +253,10 @@ export function App() {
       <Hero user={user} nextMatch={nextMatch} onLogout={logout} />
 
       <NavBar view={view} setView={setView} isAdmin={user.role === "ADMIN"} />
+      <div className="live-update-indicator" role="status">
+        <span aria-hidden="true">●</span>
+        Live updates enabled
+      </div>
 
       {message && (
         <div className="notice" role="status">

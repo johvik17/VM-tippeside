@@ -245,6 +245,26 @@ th {
   box-shadow: 0 0 26px rgba(247, 201, 72, 0.28);
 }
 
+.live-update-indicator {
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 16px;
+  padding: 7px 11px;
+  color: #cfe9dc;
+  border: 1px solid rgba(143, 232, 192, 0.22);
+  border-radius: 999px;
+  background: rgba(10, 44, 34, 0.46);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.live-update-indicator span {
+  color: #8fe8c0;
+  text-shadow: 0 0 14px rgba(143, 232, 192, 0.8);
+}
+
 .icon-button {
   width: 36px;
   height: 36px;
