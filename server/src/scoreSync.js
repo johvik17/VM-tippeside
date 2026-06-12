@@ -74,9 +74,10 @@ export async function syncScores() {
       throw new Error(`Football API returned ${response.statusCode}`);
     }
     const apiFixtures = response.fixtures;
+    const groupMatches = await loadLocalGroupMatches();
 
     const worldCupFixtures = apiFixtures.filter(isWorldCupFixture);
-    const updates = matchFixtures(localMatches, worldCupFixtures);
+    const updates = matchFixtures(groupMatches, worldCupFixtures);
     console.log(
       `[scores] Fetched ${apiFixtures.length} fixtures for ${today}, kept ${worldCupFixtures.length} FIFA World Cup fixtures, matched ${updates.length} local matches.`
     );
@@ -116,6 +117,15 @@ async function loadLocalMatchesForDate(date) {
      WHERE match_date = $1
      ORDER BY start_time ASC`,
     [date]
+  );
+}
+
+async function loadLocalGroupMatches() {
+  return many(
+    `SELECT id, match_number, home_team, away_team, match_date, start_time, home_score, away_score, status
+     FROM matches
+     WHERE match_number BETWEEN 1 AND 72
+     ORDER BY match_number ASC`
   );
 }
 
@@ -308,8 +318,11 @@ function buildHeaders() {
 
 function normalizeFixtures(data) {
   if (provider === "api-football" || provider === "apisports") {
-    return (data.response ?? []).map((fixture) => ({
-      matchNumber: readMatchNumber(fixture),
+    return [...(data.response ?? [])]
+      .sort((a, b) => Number(a.fixture?.timestamp ?? 0) - Number(b.fixture?.timestamp ?? 0))
+      .map((fixture, index) => ({
+      apiMatchNumber: index + 1,
+      matchNumber: readMatchNumber(fixture) ?? index + 1,
       date: fixture.fixture?.date?.slice(0, 10),
       kickoffAt: fixture.fixture?.date,
       homeTeam: fixture.teams?.home?.name,
@@ -325,6 +338,7 @@ function normalizeFixtures(data) {
 
   if (provider === "football-data" || provider === "football-data.org") {
     return (data.matches ?? []).map((match) => ({
+      apiMatchNumber: readMatchNumber(match),
       matchNumber: readMatchNumber(match),
       date: match.utcDate?.slice(0, 10),
       kickoffAt: match.utcDate,
@@ -341,6 +355,7 @@ function normalizeFixtures(data) {
 
   const fixtures = Array.isArray(data) ? data : data.fixtures ?? data.matches ?? [];
   return fixtures.map((fixture) => ({
+    apiMatchNumber: fixture.apiMatchNumber ?? fixture.api_match_number ?? readMatchNumber(fixture),
     matchNumber: readMatchNumber(fixture),
     date: fixture.date?.slice(0, 10) ?? fixture.utcDate?.slice(0, 10),
     kickoffAt: fixture.kickoffAt ?? fixture.kickoff_at ?? fixture.utcDate ?? fixture.date,
@@ -363,9 +378,11 @@ function matchFixtures(localMatches, apiFixtures) {
   const byMatchNumber = new Map();
   const byTeams = new Map();
   const matchedFixtureKeys = new Set();
+  const matchedLocalIds = new Set();
 
   for (const fixture of apiFixtures) {
-    if (fixture.matchNumber) byMatchNumber.set(Number(fixture.matchNumber), fixture);
+    if (fixture.apiMatchNumber) byMatchNumber.set(Number(fixture.apiMatchNumber), fixture);
+    else if (fixture.matchNumber) byMatchNumber.set(Number(fixture.matchNumber), fixture);
     if (fixture.date && fixture.homeTeam && fixture.awayTeam) {
       const key = buildTeamsKey(fixture.homeTeam, fixture.awayTeam);
       const existing = byTeams.get(key) ?? [];
@@ -376,13 +393,18 @@ function matchFixtures(localMatches, apiFixtures) {
 
   const updates = localMatches
     .map((match) => {
-      const fixture =
-        (match.match_number ? byMatchNumber.get(Number(match.match_number)) : null) ??
-        findTeamFixture(byTeams.get(buildTeamsKey(match.home_team, match.away_team)), match);
+      const fixtureByNumber = match.match_number ? byMatchNumber.get(Number(match.match_number)) : null;
+      const fixture = fixtureByNumber ?? findTeamFixture(byTeams.get(buildTeamsKey(match.home_team, match.away_team)), match);
 
       if (!fixture) return null;
 
       matchedFixtureKeys.add(getFixtureLogKey(fixture));
+      matchedLocalIds.add(match.id);
+      if (fixtureByNumber) {
+        console.log(`[scores] matched by matchNumber: apiMatchNumber=${fixture.apiMatchNumber ?? fixture.matchNumber} localMatchNumber=${match.match_number}`);
+      } else {
+        console.log("[scores] matched by teams/time fallback");
+      }
       logMatchedFixture(fixture, match);
       return { match, fixture };
     })
@@ -391,7 +413,15 @@ function matchFixtures(localMatches, apiFixtures) {
   for (const fixture of apiFixtures) {
     if (!matchedFixtureKeys.has(getFixtureLogKey(fixture))) {
       console.log(
-        `[scores] skipped because no local match found: API: ${formatFixtureTeams(fixture)} date=${fixture.date ?? "-"}`
+        `[scores] skipped: no matchNumber/team fallback API: ${formatFixtureTeams(fixture)} apiMatchNumber=${fixture.apiMatchNumber ?? "-"} date=${fixture.date ?? "-"}`
+      );
+    }
+  }
+
+  for (const match of localMatches) {
+    if (!matchedLocalIds.has(match.id)) {
+      console.log(
+        `[scores] skipped: no matchNumber/team fallback LOCAL: ${formatLocalTeams(match)} localMatchNumber=${match.match_number ?? "-"}`
       );
     }
   }
@@ -405,7 +435,7 @@ function findTeamFixture(fixtures = [], match) {
   const closeFixture = fixtures.find((fixture) => {
     const fixtureTime = new Date(fixture.kickoffAt ?? fixture.date).getTime();
     if (!Number.isFinite(matchTime) || !Number.isFinite(fixtureTime)) return false;
-    return Math.abs(matchTime - fixtureTime) <= 36 * 60 * 60 * 1000;
+    return Math.abs(matchTime - fixtureTime) <= 12 * 60 * 60 * 1000;
   });
 
   return closeFixture ?? fixtures[0];
@@ -487,7 +517,7 @@ function buildTeamsKey(homeTeam, awayTeam) {
 }
 
 function getFixtureLogKey(fixture) {
-  return `${fixture.matchNumber ?? ""}|${fixture.kickoffAt ?? fixture.date ?? ""}|${buildTeamsKey(fixture.homeTeam, fixture.awayTeam)}`;
+  return `${fixture.apiMatchNumber ?? fixture.matchNumber ?? ""}|${fixture.kickoffAt ?? fixture.date ?? ""}|${buildTeamsKey(fixture.homeTeam, fixture.awayTeam)}`;
 }
 
 function logMatchedFixture(fixture, match) {
@@ -506,22 +536,32 @@ function formatLocalTeams(match) {
 
 function normalizeTeam(team) {
   const normalized = String(team ?? "")
+    .replace(/&/g, " and ")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const aliases = {
-    czechrepublic: "czechia",
-    korearepublic: "southkorea",
-    usa: "unitedstates",
-    unitedstatesofamerica: "unitedstates",
-    cotedivoire: "ivorycoast",
+    "czech republic": "czechia",
+    "korea republic": "south korea",
+    "bosnia herzegovina": "bosnia and herzegovina",
+    "bosnia and herzegovina": "bosnia and herzegovina",
+    "cape verde islands": "cape verde",
+    "ivory coast": "ivory coast",
+    "cote divoire": "ivory coast",
+    "cote d ivoire": "ivory coast",
+    curacao: "curacao",
     turkiye: "turkey",
-    curacao: "curacao"
+    turkey: "turkey",
+    usa: "usa",
+    "united states": "usa",
+    "united states of america": "usa"
   };
 
-  return aliases[normalized] ?? normalized;
+  return (aliases[normalized] ?? normalized).replace(/\s+/g, "");
 }
 
 function numberOrNull(value) {
