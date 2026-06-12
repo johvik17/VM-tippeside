@@ -38,9 +38,8 @@ FOOTBALL_API_KEY=your-football-api-key
 FOOTBALL_API_COMPETITION_ID=1
 FOOTBALL_API_SEASON=2026
 FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
-FOOTBALL_SCORE_IDLE_POLL_MS=1800000
-FOOTBALL_SCORE_LIVE_POLL_MS=60000
-FOOTBALL_API_DAILY_LIMIT=90
+FOOTBALL_SCORE_IDLE_POLL_MS=300000
+FOOTBALL_SCORE_LIVE_POLL_MS=30000
 ```
 
 Automatisk score-sync er av som standard. Set `FOOTBALL_SCORE_SYNC_ENABLED=true`
@@ -48,13 +47,11 @@ for aa aktivere polling mot ekstern fotball-API. Naar flagget manglar eller er
 `false`, loggar serveren `[scores] disabled by configuration` og sender ingen
 eksterne score-kall.
 
-Score-jobben held seg innanfor gratisnivå:
+Score-jobben brukar denne polling-strategien:
 
-- Ingen API-kall dersom det ikkje er lokale kampar i dag.
-- Dersom det er kampar i dag, men ingen er live: polling kvart 30. minutt.
-- Dersom minst éin kamp er live: polling kvart 60. sekund.
-- Når alle dagens kampar er ferdige, går jobben tilbake til idle polling.
-- API-kall blir stoppa når `FOOTBALL_API_DAILY_LIMIT` er nådd.
+- Dersom det ikkje er lokale kampar i dag: polling kvart 60. minutt.
+- Dersom det er kampar i dag, men ingen er live: polling kvart 5. minutt.
+- Dersom minst ein kamp er live: polling kvart 30. sekund.
 - API-et blir berre kalla for dagens dato.
 - API-kall blir filtrert til FIFA World Cup-konkurransen med
   `FOOTBALL_API_COMPETITION_ID` og `FOOTBALL_API_SEASON`.
@@ -145,9 +142,8 @@ FOOTBALL_API_KEY=din-api-nokkel
 FOOTBALL_API_COMPETITION_ID=1
 FOOTBALL_API_SEASON=2026
 FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io/fixtures?league=1&season=2026
-FOOTBALL_SCORE_IDLE_POLL_MS=1800000
-FOOTBALL_SCORE_LIVE_POLL_MS=60000
-FOOTBALL_API_DAILY_LIMIT=90
+FOOTBALL_SCORE_IDLE_POLL_MS=300000
+FOOTBALL_SCORE_LIVE_POLL_MS=30000
 ```
 
 Når Render er deploya, test:

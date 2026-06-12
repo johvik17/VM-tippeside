@@ -1,7 +1,6 @@
 import { many, query, recalculateMatchPoints } from "./db.js";
 
-const ONE_MINUTE = 60 * 1000;
-const THIRTY_MINUTES = 30 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
 const provider = process.env.FOOTBALL_API_PROVIDER?.trim().toLowerCase();
 const apiKey = process.env.FOOTBALL_API_KEY?.trim();
 const baseUrl = process.env.FOOTBALL_API_BASE_URL?.trim();
@@ -11,15 +10,13 @@ const competitionId =
   (provider === "api-football" || provider === "apisports" ? "1" : null) ??
   (provider === "football-data" || provider === "football-data.org" ? "WC" : null);
 const season = process.env.FOOTBALL_API_SEASON?.trim() ?? "2026";
-const livePollMs = Number(process.env.FOOTBALL_SCORE_LIVE_POLL_MS ?? ONE_MINUTE);
-const idlePollMs = Number(process.env.FOOTBALL_SCORE_IDLE_POLL_MS ?? THIRTY_MINUTES);
-const dailyRequestLimit = Number(process.env.FOOTBALL_API_DAILY_LIMIT ?? 90);
+const livePollMs = Number(process.env.FOOTBALL_SCORE_LIVE_POLL_MS ?? 30000);
+const idlePollMs = Number(process.env.FOOTBALL_SCORE_IDLE_POLL_MS ?? 300000);
+const noMatchesPollMs = ONE_HOUR;
 const apiFootballGuideFixtureUrl = "https://v3.football.api-sports.io/fixtures?league=1&season=2026";
 
 let syncInProgress = false;
 let timeoutId = null;
-let requestCount = 0;
-let requestCountDate = currentDate();
 
 export function startScorePolling() {
   if (!scoreSyncEnabled) {
@@ -39,7 +36,7 @@ export function startScorePolling() {
   console.log(
     `[scores] Starting ${provider} score polling. idle=${Math.round(idlePollMs / 1000)}s live=${Math.round(
       livePollMs / 1000
-    )}s dailyLimit=${dailyRequestLimit} competition=${competitionId ?? "strict-name-filter"} season=${season}.`
+    )}s noMatches=${Math.round(noMatchesPollMs / 1000)}s competition=${competitionId ?? "strict-name-filter"} season=${season}.`
   );
 
   scheduleNextSync(0);
@@ -59,29 +56,20 @@ export async function syncScores() {
 
   syncInProgress = true;
   try {
-    resetDailyCounterIfNeeded();
-
     const today = currentDate();
     const localMatches = await loadLocalMatchesForDate(today);
 
     if (localMatches.length === 0) {
       console.log("[scores] no matches today");
-      scheduleNextSync(idlePollMs);
-      return;
-    }
-
-    if (requestCount >= dailyRequestLimit) {
-      console.log(`[scores] daily request limit reached (${requestCount}/${dailyRequestLimit}), skipping API call.`);
-      scheduleNextSync(idlePollMs);
+      scheduleNextSync(noMatchesPollMs);
       return;
     }
 
     const hasLiveBeforeFetch = localMatches.some((match) => match.status === "LIVE");
-    console.log(hasLiveBeforeFetch ? "[scores] live polling" : "[scores] idle polling");
+    console.log(hasLiveBeforeFetch ? "[scores] live polling every 30s" : "[scores] idle polling every 5m");
 
     console.log("[scores] fetching FIFA World Cup fixtures only");
     const response = await requestFixtures(today);
-    requestCount += 1;
     if (!response.ok) {
       throw new Error(`Football API returned ${response.statusCode}`);
     }
@@ -90,7 +78,7 @@ export async function syncScores() {
     const worldCupFixtures = apiFixtures.filter(isWorldCupFixture);
     const updates = matchFixtures(localMatches, worldCupFixtures);
     console.log(
-      `[scores] Fetched ${apiFixtures.length} fixtures for ${today}, kept ${worldCupFixtures.length} FIFA World Cup fixtures, matched ${updates.length} local matches. Requests today: ${requestCount}/${dailyRequestLimit}.`
+      `[scores] Fetched ${apiFixtures.length} fixtures for ${today}, kept ${worldCupFixtures.length} FIFA World Cup fixtures, matched ${updates.length} local matches.`
     );
 
     for (const { match, fixture } of updates) {
@@ -99,9 +87,8 @@ export async function syncScores() {
 
     const latestTodayMatches = await loadLocalMatchesForDate(today);
     const hasLiveAfterFetch = latestTodayMatches.some((match) => match.status === "LIVE");
-    const allFinished = latestTodayMatches.every((match) => match.status === "FINISHED");
 
-    if (hasLiveAfterFetch && !allFinished && requestCount < dailyRequestLimit) {
+    if (hasLiveAfterFetch) {
       scheduleNextSync(livePollMs);
       return;
     }
@@ -136,7 +123,6 @@ export async function testScoreSync(date = currentDate()) {
   if (!scoreSyncEnabled) return disabledScoreSyncResponse();
 
   const response = await requestFixtures(date);
-  requestCount += 1;
 
   return {
     provider,
@@ -156,7 +142,6 @@ export async function rawTestScoreSync() {
   if (!scoreSyncEnabled) return disabledScoreSyncResponse();
 
   const response = await requestApiFootballRawFixtures(apiFootballGuideFixtureUrl);
-  requestCount += 1;
 
   return {
     statusCode: response.statusCode,
@@ -466,14 +451,6 @@ async function updateMatchFromFixture(match, fixture) {
   if (nextStatus === "FINISHED" && (match.status !== "FINISHED" || scoreChanged)) {
     await recalculateMatchPoints(match.id);
     console.log(`[scores] Recalculated prediction points for match #${match.match_number ?? match.id}.`);
-  }
-}
-
-function resetDailyCounterIfNeeded() {
-  const today = currentDate();
-  if (requestCountDate !== today) {
-    requestCount = 0;
-    requestCountDate = today;
   }
 }
 
