@@ -13,7 +13,7 @@ const season = process.env.FOOTBALL_API_SEASON?.trim() ?? "2026";
 const livePollMs = Number(process.env.FOOTBALL_SCORE_LIVE_POLL_MS ?? 30000);
 const idlePollMs = Number(process.env.FOOTBALL_SCORE_IDLE_POLL_MS ?? 300000);
 const noMatchesPollMs = ONE_HOUR;
-const apiFootballGuideFixtureUrl = "https://v3.football.api-sports.io/fixtures?league=1&season=2026";
+const apiFootballBaseUrl = "https://v3.football.api-sports.io";
 
 let syncInProgress = false;
 let timeoutId = null;
@@ -69,7 +69,7 @@ export async function syncScores() {
     console.log(hasLiveBeforeFetch ? "[scores] live polling every 30s" : "[scores] idle polling every 5m");
 
     console.log("[scores] fetching FIFA World Cup fixtures only");
-    const response = await requestFixtures(today);
+    const response = await requestFixtures();
     if (!response.ok) {
       throw new Error(`Football API returned ${response.statusCode}`);
     }
@@ -119,10 +119,10 @@ async function loadLocalMatchesForDate(date) {
   );
 }
 
-export async function testScoreSync(date = currentDate()) {
+export async function testScoreSync() {
   if (!scoreSyncEnabled) return disabledScoreSyncResponse();
 
-  const response = await requestFixtures(date);
+  const response = await requestFixtures();
 
   return {
     provider,
@@ -133,22 +133,23 @@ export async function testScoreSync(date = currentDate()) {
     fixtureCount: response.responseLength,
     results: response.results,
     errors: response.errors,
-    sampleCompetition: response.competitionNames[0] ?? null,
-    sampleFixture: response.fixtures[0] ?? null
+    sampleCompetition: response.rawFixtures[0]?.league?.name ?? null,
+    sampleFixture: formatSampleFixture(response.rawFixtures[0]),
+    fixtures: response.rawFixtures.slice(0, 2)
   };
 }
 
 export async function rawTestScoreSync() {
   if (!scoreSyncEnabled) return disabledScoreSyncResponse();
 
-  const response = await requestApiFootballRawFixtures(apiFootballGuideFixtureUrl);
+  const response = await requestFixtures();
 
   return {
     statusCode: response.statusCode,
     results: response.results,
     errors: response.errors,
     responseLength: response.responseLength,
-    fixtures: response.response.slice(0, 2)
+    fixtures: response.rawFixtures.slice(0, 2)
   };
 }
 
@@ -160,8 +161,8 @@ function disabledScoreSyncResponse() {
   };
 }
 
-async function requestFixtures(date) {
-  const url = buildFixtureUrl(date);
+async function requestFixtures() {
+  const url = buildFixtureUrl();
   console.log(`[scores] requesting: ${sanitizeUrl(url)}`);
 
   const response = await fetch(url, {
@@ -178,6 +179,7 @@ async function requestFixtures(date) {
       results: null,
       errors: body,
       fixtures: [],
+      rawFixtures: [],
       competitionNames: [],
       firstFixtureDate: null,
       responseLength: 0
@@ -186,12 +188,13 @@ async function requestFixtures(date) {
 
   const data = await response.json();
   logJsonShape(data);
+  const rawFixtures = Array.isArray(data.response) ? data.response : [];
   const fixtures = normalizeFixtures(data);
   const competitionNames = [...new Set(fixtures.map((fixture) => fixture.competitionName).filter(Boolean))];
   const firstFixtureDate = fixtures[0]?.date ?? null;
   const errors = readApiErrors(data);
   const results = readApiResults(data);
-  const responseLength = readApiResponseLength(data, fixtures);
+  const responseLength = rawFixtures.length;
 
   console.log(`[scores] fixture count returned: ${responseLength}`);
   console.log(`[scores] competition names returned: ${competitionNames.length ? competitionNames.join(", ") : "-"}`);
@@ -206,49 +209,19 @@ async function requestFixtures(date) {
     results,
     errors,
     fixtures,
+    rawFixtures,
     competitionNames,
     firstFixtureDate,
     responseLength
   };
 }
 
-async function requestApiFootballRawFixtures(url) {
-  console.log(`[scores] requesting: ${sanitizeUrl(url)}`);
-
-  const response = await fetch(url, {
-    headers: { "x-apisports-key": process.env.FOOTBALL_API_KEY }
-  });
-  console.log(`[scores] response status: ${response.status}`);
-
-  const text = await response.text();
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { errors: { parse: "API response was not valid JSON" }, rawBody: text };
-  }
-
-  if (!response.ok) {
-    console.error(`[scores] response body: ${text}`);
-  } else {
-    logJsonShape(data);
-  }
-
-  return {
-    statusCode: response.status,
-    results: data.results ?? null,
-    errors: readApiErrors(data),
-    responseLength: Array.isArray(data.response) ? data.response.length : 0,
-    response: Array.isArray(data.response) ? data.response : []
-  };
-}
-
-function buildFixtureUrl(date) {
-  if (baseUrl.includes("{date}")) {
-    return baseUrl
-      .replaceAll("{date}", date)
-      .replaceAll("{competitionId}", competitionId ?? "")
-      .replaceAll("{season}", season);
+function buildFixtureUrl() {
+  if (provider === "api-football" || provider === "apisports") {
+    const url = new URL("/fixtures", apiFootballBaseUrl);
+    url.searchParams.set("league", competitionId ?? "1");
+    url.searchParams.set("season", season);
+    return url.toString();
   }
 
   const url = new URL(baseUrl);
@@ -256,12 +229,9 @@ function buildFixtureUrl(date) {
     if (competitionId && !url.pathname.includes("/competitions/")) {
       url.pathname = `${url.pathname.replace(/\/$/, "")}/competitions/${competitionId}/matches`;
     }
-    url.searchParams.set("dateFrom", date);
-    url.searchParams.set("dateTo", date);
   } else {
     if (competitionId) url.searchParams.set("league", competitionId);
     if (season) url.searchParams.set("season", season);
-    url.searchParams.set("date", date);
   }
   return url.toString();
 }
@@ -292,18 +262,19 @@ function readApiErrors(data) {
   return data?.errors ?? null;
 }
 
-function readApiResponseLength(data, normalizedFixtures) {
-  if ((provider === "api-football" || provider === "apisports") && Array.isArray(data?.response)) {
-    return data.response.length;
-  }
-  return normalizedFixtures.length;
-}
-
 function hasApiErrors(errors) {
   if (!errors) return false;
   if (Array.isArray(errors)) return errors.length > 0;
   if (typeof errors === "object") return Object.keys(errors).length > 0;
   return Boolean(errors);
+}
+
+function formatSampleFixture(fixture) {
+  if (!fixture) return null;
+  const homeTeam = fixture.teams?.home?.name ?? fixture.homeTeam ?? fixture.home_team;
+  const awayTeam = fixture.teams?.away?.name ?? fixture.awayTeam ?? fixture.away_team;
+  if (!homeTeam || !awayTeam) return null;
+  return `${homeTeam} vs ${awayTeam}`;
 }
 
 function sanitizeUrl(urlValue) {
@@ -340,12 +311,14 @@ function normalizeFixtures(data) {
     return (data.response ?? []).map((fixture) => ({
       matchNumber: readMatchNumber(fixture),
       date: fixture.fixture?.date?.slice(0, 10),
+      kickoffAt: fixture.fixture?.date,
       homeTeam: fixture.teams?.home?.name,
       awayTeam: fixture.teams?.away?.name,
       homeScore: numberOrNull(fixture.goals?.home),
       awayScore: numberOrNull(fixture.goals?.away),
       status: mapApiFootballStatus(fixture.fixture?.status?.short),
       competitionId: fixture.league?.id ? String(fixture.league.id) : null,
+      competitionSeason: fixture.league?.season ? String(fixture.league.season) : null,
       competitionName: fixture.league?.name
     }));
   }
@@ -354,12 +327,14 @@ function normalizeFixtures(data) {
     return (data.matches ?? []).map((match) => ({
       matchNumber: readMatchNumber(match),
       date: match.utcDate?.slice(0, 10),
+      kickoffAt: match.utcDate,
       homeTeam: match.homeTeam?.name,
       awayTeam: match.awayTeam?.name,
       homeScore: numberOrNull(match.score?.fullTime?.home ?? match.score?.regularTime?.home),
       awayScore: numberOrNull(match.score?.fullTime?.away ?? match.score?.regularTime?.away),
       status: mapFootballDataStatus(match.status),
       competitionId: match.competition?.code ?? (match.competition?.id ? String(match.competition.id) : null),
+      competitionSeason: null,
       competitionName: match.competition?.name
     }));
   }
@@ -368,44 +343,33 @@ function normalizeFixtures(data) {
   return fixtures.map((fixture) => ({
     matchNumber: readMatchNumber(fixture),
     date: fixture.date?.slice(0, 10) ?? fixture.utcDate?.slice(0, 10),
+    kickoffAt: fixture.kickoffAt ?? fixture.kickoff_at ?? fixture.utcDate ?? fixture.date,
     homeTeam: fixture.homeTeam ?? fixture.home_team ?? fixture.home?.name,
     awayTeam: fixture.awayTeam ?? fixture.away_team ?? fixture.away?.name,
     homeScore: numberOrNull(fixture.homeScore ?? fixture.home_score ?? fixture.score?.home),
     awayScore: numberOrNull(fixture.awayScore ?? fixture.away_score ?? fixture.score?.away),
     status: normalizeStatus(fixture.status),
     competitionId: fixture.competitionId ?? fixture.competition_id ?? fixture.leagueId ?? fixture.league_id ?? null,
+    competitionSeason: fixture.competitionSeason ?? fixture.competition_season ?? fixture.leagueSeason ?? fixture.league_season ?? null,
     competitionName: fixture.competitionName ?? fixture.competition_name ?? fixture.leagueName ?? fixture.league_name
   }));
 }
 
 function isWorldCupFixture(fixture) {
-  if (competitionId && fixture.competitionId && String(fixture.competitionId) === String(competitionId)) {
-    return true;
-  }
-
-  if (competitionId && !fixture.competitionId && provider !== "custom") {
-    return true;
-  }
-
-  return isStrictWorldCupName(fixture.competitionName);
-}
-
-function isStrictWorldCupName(name) {
-  const normalized = normalizeTeam(name);
-  if (!normalized.includes("worldcup")) return false;
-
-  const blockedTerms = ["club", "qualification", "qualifier", "qualifying", "women", "u17", "u20", "nations", "friendly"];
-  return !blockedTerms.some((term) => normalized.includes(term));
+  return String(fixture.competitionId) === String(competitionId) && String(fixture.competitionSeason) === String(season);
 }
 
 function matchFixtures(localMatches, apiFixtures) {
   const byMatchNumber = new Map();
-  const byDateTeams = new Map();
+  const byTeams = new Map();
 
   for (const fixture of apiFixtures) {
     if (fixture.matchNumber) byMatchNumber.set(Number(fixture.matchNumber), fixture);
     if (fixture.date && fixture.homeTeam && fixture.awayTeam) {
-      byDateTeams.set(buildDateTeamsKey(fixture.date, fixture.homeTeam, fixture.awayTeam), fixture);
+      const key = buildTeamsKey(fixture.homeTeam, fixture.awayTeam);
+      const existing = byTeams.get(key) ?? [];
+      existing.push(fixture);
+      byTeams.set(key, existing);
     }
   }
 
@@ -413,11 +377,23 @@ function matchFixtures(localMatches, apiFixtures) {
     .map((match) => {
       const fixture =
         (match.match_number ? byMatchNumber.get(Number(match.match_number)) : null) ??
-        byDateTeams.get(buildDateTeamsKey(formatDate(match.match_date ?? match.start_time), match.home_team, match.away_team));
+        findTeamFixture(byTeams.get(buildTeamsKey(match.home_team, match.away_team)), match);
 
       return fixture ? { match, fixture } : null;
     })
     .filter(Boolean);
+}
+
+function findTeamFixture(fixtures = [], match) {
+  if (fixtures.length === 0) return null;
+  const matchTime = new Date(match.start_time).getTime();
+  const closeFixture = fixtures.find((fixture) => {
+    const fixtureTime = new Date(fixture.kickoffAt ?? fixture.date).getTime();
+    if (!Number.isFinite(matchTime) || !Number.isFinite(fixtureTime)) return false;
+    return Math.abs(matchTime - fixtureTime) <= 36 * 60 * 60 * 1000;
+  });
+
+  return closeFixture ?? fixtures[0];
 }
 
 async function updateMatchFromFixture(match, fixture) {
@@ -482,16 +458,28 @@ function normalizeStatus(status) {
   return "SCHEDULED";
 }
 
-function buildDateTeamsKey(date, homeTeam, awayTeam) {
-  return `${formatDate(date)}|${normalizeTeam(homeTeam)}|${normalizeTeam(awayTeam)}`;
+function buildTeamsKey(homeTeam, awayTeam) {
+  return `${normalizeTeam(homeTeam)}|${normalizeTeam(awayTeam)}`;
 }
 
 function normalizeTeam(team) {
-  return String(team ?? "")
+  const normalized = String(team ?? "")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
+
+  const aliases = {
+    czechrepublic: "czechia",
+    korearepublic: "southkorea",
+    usa: "unitedstates",
+    unitedstatesofamerica: "unitedstates",
+    cotedivoire: "ivorycoast",
+    turkiye: "turkey",
+    curacao: "curacao"
+  };
+
+  return aliases[normalized] ?? normalized;
 }
 
 function numberOrNull(value) {
