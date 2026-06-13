@@ -154,7 +154,7 @@ app.get(
   "/api/matches",
   requireAuth,
   asyncHandler(async (_req, res) => {
-    const matches = await many("SELECT * FROM matches ORDER BY COALESCE(match_number, 999), start_time ASC");
+    const matches = await many("SELECT * FROM matches ORDER BY start_time ASC, COALESCE(match_number, 999) ASC");
     res.json({ matches: matches.map(mapMatch) });
   })
 );

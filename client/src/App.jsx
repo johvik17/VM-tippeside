@@ -446,7 +446,9 @@ function MatchOverview({ matches, predictionsByMatch, onSaved, onError }) {
 
   const activeDate = selectedDate || matchDates[0];
   const selectedIndex = Math.max(0, matchDates.indexOf(activeDate));
-  const matchesForDate = matches.filter((match) => getOsloDate(match) === activeDate);
+  const matchesForDate = matches
+    .filter((match) => getOsloDate(match) === activeDate)
+    .sort(compareMatchesByKickoff);
   const tippedCount = matchesForDate.filter((match) => predictionsByMatch[match.id]).length;
   const missingCount = matchesForDate.length - tippedCount;
   const liveCount = matchesForDate.filter(isLiveMatch).length;
@@ -1336,5 +1338,12 @@ function isLiveMatch(match) {
   const kickoff = new Date(match.kickoffAtUtc || match.startTime).getTime();
   const now = Date.now();
   return now >= kickoff && now <= kickoff + 2 * 60 * 60 * 1000 && match.status !== "FINISHED";
+}
+
+function compareMatchesByKickoff(left, right) {
+  const leftTime = new Date(left.kickoffAtUtc || left.startTime).getTime();
+  const rightTime = new Date(right.kickoffAtUtc || right.startTime).getTime();
+  if (leftTime !== rightTime) return leftTime - rightTime;
+  return (left.matchNumber ?? 999) - (right.matchNumber ?? 999);
 }
 
