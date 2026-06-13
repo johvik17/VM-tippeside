@@ -321,8 +321,8 @@ function normalizeFixtures(data) {
     return [...(data.response ?? [])]
       .sort((a, b) => Number(a.fixture?.timestamp ?? 0) - Number(b.fixture?.timestamp ?? 0))
       .map((fixture, index) => ({
-      apiMatchNumber: index + 1,
-      matchNumber: readMatchNumber(fixture) ?? index + 1,
+      apiOrderNumber: index + 1,
+      matchNumber: readMatchNumber(fixture),
       date: fixture.fixture?.date?.slice(0, 10),
       kickoffAt: fixture.fixture?.date,
       homeTeam: fixture.teams?.home?.name,
@@ -338,7 +338,7 @@ function normalizeFixtures(data) {
 
   if (provider === "football-data" || provider === "football-data.org") {
     return (data.matches ?? []).map((match) => ({
-      apiMatchNumber: readMatchNumber(match),
+      apiOrderNumber: readMatchNumber(match),
       matchNumber: readMatchNumber(match),
       date: match.utcDate?.slice(0, 10),
       kickoffAt: match.utcDate,
@@ -355,7 +355,7 @@ function normalizeFixtures(data) {
 
   const fixtures = Array.isArray(data) ? data : data.fixtures ?? data.matches ?? [];
   return fixtures.map((fixture) => ({
-    apiMatchNumber: fixture.apiMatchNumber ?? fixture.api_match_number ?? readMatchNumber(fixture),
+    apiOrderNumber: fixture.apiOrderNumber ?? fixture.api_order_number ?? null,
     matchNumber: readMatchNumber(fixture),
     date: fixture.date?.slice(0, 10) ?? fixture.utcDate?.slice(0, 10),
     kickoffAt: fixture.kickoffAt ?? fixture.kickoff_at ?? fixture.utcDate ?? fixture.date,
@@ -381,8 +381,7 @@ function matchFixtures(localMatches, apiFixtures) {
   const matchedLocalIds = new Set();
 
   for (const fixture of apiFixtures) {
-    if (fixture.apiMatchNumber) byMatchNumber.set(Number(fixture.apiMatchNumber), fixture);
-    else if (fixture.matchNumber) byMatchNumber.set(Number(fixture.matchNumber), fixture);
+    if (fixture.matchNumber) byMatchNumber.set(Number(fixture.matchNumber), fixture);
     if (fixture.date && fixture.homeTeam && fixture.awayTeam) {
       const key = buildTeamsKey(fixture.homeTeam, fixture.awayTeam);
       const existing = byTeams.get(key) ?? [];
@@ -394,14 +393,16 @@ function matchFixtures(localMatches, apiFixtures) {
   const updates = localMatches
     .map((match) => {
       const fixtureByNumber = match.match_number ? byMatchNumber.get(Number(match.match_number)) : null;
-      const fixture = fixtureByNumber ?? findTeamFixture(byTeams.get(buildTeamsKey(match.home_team, match.away_team)), match);
+      const safeFixtureByNumber =
+        fixtureByNumber && teamsMatchFixture(match, fixtureByNumber) ? fixtureByNumber : null;
+      const fixture = safeFixtureByNumber ?? findTeamFixture(byTeams.get(buildTeamsKey(match.home_team, match.away_team)), match);
 
       if (!fixture) return null;
 
       matchedFixtureKeys.add(getFixtureLogKey(fixture));
       matchedLocalIds.add(match.id);
-      if (fixtureByNumber) {
-        console.log(`[scores] matched by matchNumber: apiMatchNumber=${fixture.apiMatchNumber ?? fixture.matchNumber} localMatchNumber=${match.match_number}`);
+      if (safeFixtureByNumber) {
+        console.log(`[scores] matched by matchNumber: apiMatchNumber=${fixture.matchNumber} localMatchNumber=${match.match_number}`);
       } else {
         console.log("[scores] matched by teams/time fallback");
       }
@@ -413,7 +414,7 @@ function matchFixtures(localMatches, apiFixtures) {
   for (const fixture of apiFixtures) {
     if (!matchedFixtureKeys.has(getFixtureLogKey(fixture))) {
       console.log(
-        `[scores] skipped: no matchNumber/team fallback API: ${formatFixtureTeams(fixture)} apiMatchNumber=${fixture.apiMatchNumber ?? "-"} date=${fixture.date ?? "-"}`
+        `[scores] skipped: no matchNumber/team fallback API: ${formatFixtureTeams(fixture)} apiOrderNumber=${fixture.apiOrderNumber ?? "-"} date=${fixture.date ?? "-"}`
       );
     }
   }
@@ -427,6 +428,10 @@ function matchFixtures(localMatches, apiFixtures) {
   }
 
   return updates;
+}
+
+function teamsMatchFixture(match, fixture) {
+  return buildTeamsKey(match.home_team, match.away_team) === buildTeamsKey(fixture.homeTeam, fixture.awayTeam);
 }
 
 function findTeamFixture(fixtures = [], match) {
@@ -517,7 +522,7 @@ function buildTeamsKey(homeTeam, awayTeam) {
 }
 
 function getFixtureLogKey(fixture) {
-  return `${fixture.apiMatchNumber ?? fixture.matchNumber ?? ""}|${fixture.kickoffAt ?? fixture.date ?? ""}|${buildTeamsKey(fixture.homeTeam, fixture.awayTeam)}`;
+  return `${fixture.matchNumber ?? fixture.apiOrderNumber ?? ""}|${fixture.kickoffAt ?? fixture.date ?? ""}|${buildTeamsKey(fixture.homeTeam, fixture.awayTeam)}`;
 }
 
 function logMatchedFixture(fixture, match) {
