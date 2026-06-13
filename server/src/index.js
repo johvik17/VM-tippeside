@@ -519,6 +519,27 @@ app.put(
 );
 
 app.put(
+  "/api/admin/matches/:id/reopen",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const match = await one(
+      `UPDATE matches
+       SET home_score = NULL, away_score = NULL, status = 'SCHEDULED', updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [req.params.id]
+    );
+
+    if (!match) return res.status(404).json({ message: "Kampen finst ikkje." });
+
+    await query("UPDATE predictions SET points = 0 WHERE match_id = $1", [req.params.id]);
+    const updatedMatch = await one("SELECT * FROM matches WHERE id = $1", [req.params.id]);
+    res.json({ match: mapMatch(updatedMatch) });
+  })
+);
+
+app.put(
   "/api/admin/extra-results",
   requireAuth,
   requireAdmin,

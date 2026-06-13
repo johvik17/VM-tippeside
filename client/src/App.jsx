@@ -1244,15 +1244,31 @@ function ResultRow({ match, onChanged, onError }) {
     }
   }
 
+  async function reopenMatch() {
+    try {
+      await apiRequest(`/admin/matches/${match.id}/reopen`, {
+        method: "PUT"
+      });
+      await onChanged();
+    } catch (error) {
+      onError(error.message);
+    }
+  }
+
   return (
     <form className="result-row" onSubmit={saveResult}>
       <div>
         <strong>#{match.matchNumber} {match.homeTeam} - {match.awayTeam}</strong>
-        <span>Gruppe {match.groupName} - {formatNorwegianKickoff(match)} norsk tid - {match.stadium}{match.city ? `, ${match.city}` : ""}</span>
+        <span>
+          Gruppe {match.groupName} - {formatNorwegianKickoff(match)} norsk tid - {match.stadium}{match.city ? `, ${match.city}` : ""} - Status: {match.status}
+        </span>
       </div>
       <input type="number" min="0" max="30" value={homeScore} onChange={(event) => setHomeScore(event.target.value)} />
       <input type="number" min="0" max="30" value={awayScore} onChange={(event) => setAwayScore(event.target.value)} />
       <button className="secondary-button">Lagre</button>
+      <button type="button" className="secondary-button" onClick={reopenMatch}>
+        Apne kamp
+      </button>
     </form>
   );
 }
