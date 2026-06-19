@@ -721,6 +721,47 @@ function PublicPredictionsTable({ predictions, loading }) {
 function Leaderboard({ rows }) {
   const podium = rows.slice(0, 3);
   const bestBonus = rows.reduce((best, row) => (row.bonusPoints > (best?.bonusPoints ?? -1) ? row : best), null);
+  const [perfectDetails, setPerfectDetails] = useState(null);
+  const [perfectCache, setPerfectCache] = useState({});
+  const [perfectLoading, setPerfectLoading] = useState(false);
+
+  async function openPerfectDetails(row) {
+    if (perfectCache[row.userId]) {
+      setPerfectDetails(perfectCache[row.userId]);
+      return;
+    }
+
+    setPerfectLoading(true);
+    try {
+      const data = await apiRequest(`/users/${row.userId}/perfect-predictions`);
+      setPerfectCache((current) => ({ ...current, [row.userId]: data }));
+      setPerfectDetails(data);
+    } catch (error) {
+      setPerfectDetails({
+        username: row.username,
+        perfectCount: 0,
+        correctOutcomes: 0,
+        finishedPredictions: 0,
+        hitRate: 0,
+        matches: [],
+        error: error.message
+      });
+    } finally {
+      setPerfectLoading(false);
+    }
+  }
+
+  function closePerfectDetails() {
+    setPerfectDetails(null);
+    setPerfectCache({});
+  }
+
+  function handleLeaderboardKey(event, row) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openPerfectDetails(row);
+    }
+  }
 
   return (
     <main className="leaderboard-view">
@@ -763,7 +804,14 @@ function Leaderboard({ rows }) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.userId}>
+                <tr
+                  key={row.userId}
+                  className="clickable-row"
+                  tabIndex={0}
+                  role="button"
+                  onClick={() => openPerfectDetails(row)}
+                  onKeyDown={(event) => handleLeaderboardKey(event, row)}
+                >
                   <td>#{row.rank}</td>
                   <td><span className="table-avatar">{row.username.slice(0, 1).toUpperCase()}</span>{row.username}</td>
                   <td>{row.totalPoints}</td>
@@ -776,6 +824,59 @@ function Leaderboard({ rows }) {
           </table>
         </div>
       </section>
+
+      {(perfectDetails || perfectLoading) && (
+        <div className="modal-backdrop" role="presentation" onClick={closePerfectDetails}>
+          <section className="debug-modal perfect-modal" role="dialog" aria-modal="true" aria-label="Perfekte tips" onClick={(event) => event.stopPropagation()}>
+            <div className="debug-modal-header">
+              <h2>
+                <Trophy size={20} />
+                {perfectDetails?.username ?? "Laster..."}
+              </h2>
+              <button className="icon-button" onClick={closePerfectDetails} aria-label="Lukk">X</button>
+            </div>
+
+            <div className="perfect-modal-content">
+              {perfectLoading && !perfectDetails ? (
+                <p className="muted">Laster perfekte tips...</p>
+              ) : perfectDetails?.error ? (
+                <p className="error">{perfectDetails.error}</p>
+              ) : (
+                <>
+                  <div className="perfect-stats">
+                    <div>
+                      <span>Perfekte tips</span>
+                      <strong>{perfectDetails.perfectCount}</strong>
+                    </div>
+                    <div>
+                      <span>Riktige HUB</span>
+                      <strong>{perfectDetails.correctOutcomes}</strong>
+                    </div>
+                    <div>
+                      <span>Trefferate</span>
+                      <strong>{perfectDetails.hitRate}%</strong>
+                    </div>
+                  </div>
+
+                  {perfectDetails.matches.length === 0 ? (
+                    <p className="muted">Ingen perfekte tips enna.</p>
+                  ) : (
+                    <div className="perfect-match-list">
+                      {perfectDetails.matches.map((match) => (
+                        <article key={match.matchId} className="perfect-match-card">
+                          <strong>#{match.matchNumber} {flagForTeam(match.homeTeam)} {match.homeTeam} - {flagForTeam(match.awayTeam)} {match.awayTeam}</strong>
+                          <span>Resultat: {match.homeScore}-{match.awayScore}</span>
+                          <small>{formatTimestamp(match.kickoff)} - {match.pointsAwarded} poeng</small>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

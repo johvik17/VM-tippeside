@@ -373,6 +373,75 @@ app.get(
 );
 
 app.get(
+  "/api/users/:userId/perfect-predictions",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const user = await one("SELECT id, username FROM users WHERE id = $1", [req.params.userId]);
+    if (!user) return res.status(404).json({ message: "Brukaren finst ikkje." });
+
+    const stats = await one(
+      `SELECT
+         COUNT(*) FILTER (WHERE m.status = 'FINISHED')::int AS finished_predictions,
+         COUNT(*) FILTER (
+           WHERE m.status = 'FINISHED'
+             AND p.outcome = CASE
+               WHEN m.home_score > m.away_score THEN 'HOME'
+               WHEN m.home_score < m.away_score THEN 'AWAY'
+               ELSE 'DRAW'
+             END
+         )::int AS correct_outcomes
+       FROM predictions p
+       JOIN matches m ON m.id = p.match_id
+       WHERE p.user_id = $1`,
+      [req.params.userId]
+    );
+
+    const matches = await many(
+      `SELECT
+         m.id AS match_id,
+         m.match_number,
+         m.home_team,
+         m.away_team,
+         m.home_score,
+         m.away_score,
+         m.kickoff_at_utc,
+         m.start_time,
+         p.points
+       FROM predictions p
+       JOIN matches m ON m.id = p.match_id
+       WHERE p.user_id = $1
+         AND m.status = 'FINISHED'
+         AND p.predicted_home_goals = m.home_score
+         AND p.predicted_away_goals = m.away_score
+       ORDER BY m.start_time ASC, COALESCE(m.match_number, 999) ASC`,
+      [req.params.userId]
+    );
+
+    const finishedPredictions = stats?.finished_predictions ?? 0;
+    const correctOutcomes = stats?.correct_outcomes ?? 0;
+
+    res.json({
+      userId: user.id,
+      username: user.username,
+      perfectCount: matches.length,
+      correctOutcomes,
+      finishedPredictions,
+      hitRate: finishedPredictions > 0 ? Math.round((correctOutcomes / finishedPredictions) * 100) : 0,
+      matches: matches.map((match) => ({
+        matchId: match.match_id,
+        matchNumber: match.match_number,
+        homeTeam: match.home_team,
+        awayTeam: match.away_team,
+        homeScore: match.home_score,
+        awayScore: match.away_score,
+        kickoff: toIso(match.kickoff_at_utc ?? match.start_time),
+        pointsAwarded: match.points
+      }))
+    });
+  })
+);
+
+app.get(
   "/api/admin/users",
   requireAuth,
   requireAdmin,

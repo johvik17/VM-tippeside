@@ -878,6 +878,17 @@ td {
   color: #34d399;
 }
 
+.clickable-row {
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.clickable-row:hover,
+.clickable-row:focus-visible {
+  background: rgba(143, 232, 192, 0.08);
+  outline: none;
+}
+
 .friends-panel {
   display: grid;
   gap: 20px;
@@ -1033,6 +1044,9 @@ td {
 }
 
 .debug-modal-header h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   font-size: 1.1rem;
 }
@@ -1046,6 +1060,63 @@ td {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.perfect-modal-content {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  overflow: auto;
+}
+
+.perfect-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.perfect-stats div,
+.perfect-match-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.perfect-stats div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.perfect-stats span,
+.perfect-match-card small {
+  color: #9fb1c6;
+  font-size: 0.82rem;
+}
+
+.perfect-stats strong {
+  color: #f7c948;
+  font-size: 1.5rem;
+}
+
+.perfect-match-list {
+  display: grid;
+  gap: 10px;
+}
+
+.perfect-match-card {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+
+.perfect-match-card strong {
+  color: #ffffff;
+}
+
+.perfect-match-card span {
+  color: #8fe8c0;
+  font-weight: 900;
 }
 
 .perfect-score::after {
@@ -1123,6 +1194,10 @@ td {
 
   .leaderboard-hero {
     display: grid;
+  }
+
+  .perfect-stats {
+    grid-template-columns: 1fr;
   }
 
   .day-summary {
