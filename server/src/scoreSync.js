@@ -59,14 +59,12 @@ export async function syncScores() {
     const today = currentDate();
     const localMatches = await loadLocalMatchesForDate(today);
 
+    const hasLiveBeforeFetch = localMatches.some((match) => match.status === "LIVE");
     if (localMatches.length === 0) {
       console.log("[scores] no matches today");
-      scheduleNextSync(noMatchesPollMs);
-      return;
+    } else {
+      console.log(hasLiveBeforeFetch ? "[scores] live polling every 30s" : "[scores] idle polling every 5m");
     }
-
-    const hasLiveBeforeFetch = localMatches.some((match) => match.status === "LIVE");
-    console.log(hasLiveBeforeFetch ? "[scores] live polling every 30s" : "[scores] idle polling every 5m");
 
     console.log("[scores] fetching FIFA World Cup fixtures only");
     const response = await requestFixtures();
@@ -74,13 +72,17 @@ export async function syncScores() {
       throw new Error(`Football API returned ${response.statusCode}`);
     }
     const apiFixtures = response.fixtures;
-    const groupMatches = await loadLocalGroupMatches();
+    const syncMatches = await loadLocalMatchesForSync();
 
     const worldCupFixtures = apiFixtures.filter(isWorldCupFixture);
-    const updates = matchFixtures(groupMatches, worldCupFixtures);
+    const { updates, unmatchedFixtures } = matchFixtures(syncMatches, worldCupFixtures);
     console.log(
       `[scores] Fetched ${apiFixtures.length} fixtures for ${today}, kept ${worldCupFixtures.length} FIFA World Cup fixtures, matched ${updates.length} local matches.`
     );
+
+    for (const fixture of unmatchedFixtures) {
+      await createMatchFromFixture(fixture);
+    }
 
     for (const { match, fixture } of updates) {
       await updateMatchFromFixture(match, fixture);
@@ -94,7 +96,7 @@ export async function syncScores() {
       return;
     }
 
-    scheduleNextSync(idlePollMs);
+    scheduleNextSync(localMatches.length === 0 ? noMatchesPollMs : idlePollMs);
   } catch (error) {
     console.error("[scores] Score sync failed:", error);
     scheduleNextSync(idlePollMs);
@@ -120,12 +122,11 @@ async function loadLocalMatchesForDate(date) {
   );
 }
 
-async function loadLocalGroupMatches() {
+async function loadLocalMatchesForSync() {
   return many(
     `SELECT id, match_number, home_team, away_team, match_date, start_time, home_score, away_score, status
      FROM matches
-     WHERE match_number BETWEEN 1 AND 72
-     ORDER BY match_number ASC`
+     ORDER BY start_time ASC, COALESCE(match_number, 999) ASC`
   );
 }
 
@@ -322,9 +323,13 @@ function normalizeFixtures(data) {
       .sort((a, b) => Number(a.fixture?.timestamp ?? 0) - Number(b.fixture?.timestamp ?? 0))
       .map((fixture, index) => ({
       apiOrderNumber: index + 1,
+      apiFixtureId: fixture.fixture?.id ? String(fixture.fixture.id) : null,
       matchNumber: readMatchNumber(fixture),
       date: fixture.fixture?.date?.slice(0, 10),
       kickoffAt: fixture.fixture?.date,
+      stadium: fixture.fixture?.venue?.name,
+      city: fixture.fixture?.venue?.city,
+      round: fixture.league?.round,
       homeTeam: fixture.teams?.home?.name,
       awayTeam: fixture.teams?.away?.name,
       homeScore: numberOrNull(fixture.goals?.home),
@@ -339,9 +344,13 @@ function normalizeFixtures(data) {
   if (provider === "football-data" || provider === "football-data.org") {
     return (data.matches ?? []).map((match) => ({
       apiOrderNumber: readMatchNumber(match),
+      apiFixtureId: match.id ? String(match.id) : null,
       matchNumber: readMatchNumber(match),
       date: match.utcDate?.slice(0, 10),
       kickoffAt: match.utcDate,
+      stadium: null,
+      city: null,
+      round: match.stage ?? match.group,
       homeTeam: match.homeTeam?.name,
       awayTeam: match.awayTeam?.name,
       homeScore: numberOrNull(match.score?.fullTime?.home ?? match.score?.regularTime?.home),
@@ -356,9 +365,13 @@ function normalizeFixtures(data) {
   const fixtures = Array.isArray(data) ? data : data.fixtures ?? data.matches ?? [];
   return fixtures.map((fixture) => ({
     apiOrderNumber: fixture.apiOrderNumber ?? fixture.api_order_number ?? null,
+    apiFixtureId: fixture.apiFixtureId ?? fixture.api_fixture_id ?? fixture.id ?? null,
     matchNumber: readMatchNumber(fixture),
     date: fixture.date?.slice(0, 10) ?? fixture.utcDate?.slice(0, 10),
     kickoffAt: fixture.kickoffAt ?? fixture.kickoff_at ?? fixture.utcDate ?? fixture.date,
+    stadium: fixture.stadium ?? fixture.venue?.name ?? null,
+    city: fixture.city ?? fixture.venue?.city ?? null,
+    round: fixture.round ?? fixture.stage ?? null,
     homeTeam: fixture.homeTeam ?? fixture.home_team ?? fixture.home?.name,
     awayTeam: fixture.awayTeam ?? fixture.away_team ?? fixture.away?.name,
     homeScore: numberOrNull(fixture.homeScore ?? fixture.home_score ?? fixture.score?.home),
@@ -381,7 +394,8 @@ function matchFixtures(localMatches, apiFixtures) {
   const matchedLocalIds = new Set();
 
   for (const fixture of apiFixtures) {
-    if (fixture.matchNumber) byMatchNumber.set(Number(fixture.matchNumber), fixture);
+    const fixtureNumber = getFixtureNumber(fixture);
+    if (fixtureNumber) byMatchNumber.set(Number(fixtureNumber), fixture);
     if (fixture.date && fixture.homeTeam && fixture.awayTeam) {
       const key = buildTeamsKey(fixture.homeTeam, fixture.awayTeam);
       const existing = byTeams.get(key) ?? [];
@@ -402,7 +416,7 @@ function matchFixtures(localMatches, apiFixtures) {
       matchedFixtureKeys.add(getFixtureLogKey(fixture));
       matchedLocalIds.add(match.id);
       if (safeFixtureByNumber) {
-        console.log(`[scores] matched by matchNumber: apiMatchNumber=${fixture.matchNumber} localMatchNumber=${match.match_number}`);
+        console.log(`[scores] matched by matchNumber: apiMatchNumber=${getFixtureNumber(fixture)} localMatchNumber=${match.match_number}`);
       } else {
         console.log("[scores] matched by teams/time fallback");
       }
@@ -427,7 +441,13 @@ function matchFixtures(localMatches, apiFixtures) {
     }
   }
 
-  return updates;
+  const unmatchedFixtures = apiFixtures.filter((fixture) => !matchedFixtureKeys.has(getFixtureLogKey(fixture)));
+
+  return { updates, unmatchedFixtures };
+}
+
+function getFixtureNumber(fixture) {
+  return fixture.matchNumber ?? fixture.apiOrderNumber ?? null;
 }
 
 function teamsMatchFixture(match, fixture) {
@@ -446,6 +466,115 @@ function findTeamFixture(fixtures = [], match) {
   return closeFixture ?? fixtures[0];
 }
 
+async function createMatchFromFixture(fixture) {
+  if (!fixture.homeTeam || !fixture.awayTeam || !fixture.kickoffAt) {
+    console.log(`[scores] skipped auto-create, incomplete fixture: ${formatFixtureTeams(fixture)}`);
+    return null;
+  }
+
+  const proposedMatchNumber = Number(getFixtureNumber(fixture));
+  if (Number.isFinite(proposedMatchNumber) && proposedMatchNumber <= 72) {
+    console.log(`[scores] skipped auto-create for group-stage-looking fixture: ${formatFixtureTeams(fixture)} apiOrderNumber=${fixture.apiOrderNumber ?? "-"}`);
+    return null;
+  }
+
+  const kickoff = new Date(fixture.kickoffAt);
+  if (Number.isNaN(kickoff.getTime())) {
+    console.log(`[scores] skipped auto-create, invalid kickoff: ${formatFixtureTeams(fixture)} kickoff=${fixture.kickoffAt}`);
+    return null;
+  }
+
+  const matchNumber = Number.isFinite(proposedMatchNumber) ? proposedMatchNumber : null;
+  const kickoffIso = kickoff.toISOString();
+  const existingMatch = await findExistingMatchForFixture(fixture, matchNumber, kickoff);
+  if (existingMatch) {
+    console.log(
+      `[scores] skipped auto-create, local match already exists: #${existingMatch.match_number ?? existingMatch.id} ${formatLocalTeams(existingMatch)}`
+    );
+    return null;
+  }
+
+  const matchDate = kickoffIso.slice(0, 10);
+  const localTime = kickoffIso.slice(11, 16);
+  const stage = normalizeStage(fixture.round, matchNumber);
+
+  const match = await oneOrNullInsertMatch({
+    matchNumber,
+    homeTeam: fixture.homeTeam,
+    awayTeam: fixture.awayTeam,
+    kickoffIso,
+    matchDate,
+    localTime,
+    stadium: fixture.stadium ?? null,
+    city: fixture.city ?? null,
+    stage,
+    homeScore: fixture.homeScore,
+    awayScore: fixture.awayScore,
+    status: normalizeStatus(fixture.status) ?? "SCHEDULED"
+  });
+
+  if (match) {
+    console.log(`[scores] auto-created match #${match.match_number ?? match.id}: ${match.home_team} - ${match.away_team} ${stage}`);
+  }
+
+  return match;
+}
+
+async function findExistingMatchForFixture(fixture, matchNumber, kickoff) {
+  if (Number.isFinite(matchNumber)) {
+    const existingByNumber = await many(
+      `SELECT id, match_number, home_team, away_team, start_time
+       FROM matches
+       WHERE match_number = $1
+       LIMIT 1`,
+      [matchNumber]
+    );
+    if (existingByNumber[0]) return existingByNumber[0];
+  }
+
+  const candidates = await many(
+    `SELECT id, match_number, home_team, away_team, start_time
+     FROM matches
+     ORDER BY start_time ASC`
+  );
+  const fixtureTime = kickoff.getTime();
+
+  return candidates.find((match) => {
+    const matchTime = new Date(match.start_time).getTime();
+    return teamsMatchFixture(match, fixture) && Number.isFinite(matchTime) && Math.abs(matchTime - fixtureTime) <= 12 * 60 * 60 * 1000;
+  });
+}
+async function oneOrNullInsertMatch(match) {
+  return query(
+    `INSERT INTO matches
+      (match_number, home_team, away_team, start_time, match_date, local_time, timezone, kickoff_at_utc, stadium, group_name, city, stage, home_score, away_score, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'UTC', $7, $8, NULL, $9, $10, $11, $12, $13)
+     ON CONFLICT(match_number) DO NOTHING
+     RETURNING *`,
+    [
+      match.matchNumber,
+      match.homeTeam,
+      match.awayTeam,
+      match.kickoffIso,
+      match.matchDate,
+      match.localTime,
+      match.kickoffIso,
+      match.stadium,
+      match.city,
+      match.stage,
+      match.homeScore,
+      match.awayScore,
+      match.status
+    ]
+  ).then((result) => result.rows[0] ?? null);
+}
+
+function normalizeStage(round, matchNumber) {
+  const value = String(round ?? "").trim();
+  if (value) return value;
+  if (matchNumber >= 73 && matchNumber <= 104) return "Knockout Stage";
+  return "Group Stage";
+}
 async function updateMatchFromFixture(match, fixture) {
   const nextStatus = normalizeStatus(fixture.status);
   const nextHomeScore = fixture.homeScore;
