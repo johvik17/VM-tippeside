@@ -332,8 +332,8 @@ function normalizeFixtures(data) {
       round: fixture.league?.round,
       homeTeam: fixture.teams?.home?.name,
       awayTeam: fixture.teams?.away?.name,
-      homeScore: numberOrNull(fixture.goals?.home),
-      awayScore: numberOrNull(fixture.goals?.away),
+      homeScore: readApiFootballScore(fixture).home,
+      awayScore: readApiFootballScore(fixture).away,
       status: mapApiFootballStatus(fixture.fixture?.status?.short),
       competitionId: fixture.league?.id ? String(fixture.league.id) : null,
       competitionSeason: fixture.league?.season ? String(fixture.league.season) : null,
@@ -374,8 +374,8 @@ function normalizeFixtures(data) {
     round: fixture.round ?? fixture.stage ?? null,
     homeTeam: fixture.homeTeam ?? fixture.home_team ?? fixture.home?.name,
     awayTeam: fixture.awayTeam ?? fixture.away_team ?? fixture.away?.name,
-    homeScore: numberOrNull(fixture.homeScore ?? fixture.home_score ?? fixture.score?.home),
-    awayScore: numberOrNull(fixture.awayScore ?? fixture.away_score ?? fixture.score?.away),
+    homeScore: numberOrNull(fixture.homeScore ?? fixture.home_score ?? fixture.score?.fulltime?.home ?? fixture.score?.home),
+    awayScore: numberOrNull(fixture.awayScore ?? fixture.away_score ?? fixture.score?.fulltime?.away ?? fixture.score?.away),
     status: normalizeStatus(fixture.status),
     competitionId: fixture.competitionId ?? fixture.competition_id ?? fixture.leagueId ?? fixture.league_id ?? null,
     competitionSeason: fixture.competitionSeason ?? fixture.competition_season ?? fixture.leagueSeason ?? fixture.league_season ?? null,
@@ -585,6 +585,11 @@ async function updateMatchFromFixture(match, fixture) {
     return;
   }
 
+  if (nextStatus === "FINISHED" && (nextHomeScore === null || nextAwayScore === null)) {
+    console.log(`[scores] skipped FINISHED update without fulltime score: matchId=${match.id} ${formatLocalTeams(match)}`);
+    return;
+  }
+
   if (!nextStatus || (nextHomeScore === null && nextAwayScore === null && nextStatus === match.status)) {
     console.log(`[scores] skipped because score already identical: matchId=${match.id} ${formatLocalTeams(match)}`);
     return;
@@ -626,6 +631,21 @@ function readMatchNumber(fixture) {
   return fixture.matchNumber ?? fixture.match_number ?? null;
 }
 
+function readApiFootballScore(fixture) {
+  const status = fixture.fixture?.status?.short;
+  const isFinished = ["FT", "AET", "PEN"].includes(status);
+  const fulltimeHome = numberOrNull(fixture.score?.fulltime?.home);
+  const fulltimeAway = numberOrNull(fixture.score?.fulltime?.away);
+
+  if (isFinished) {
+    return { home: fulltimeHome, away: fulltimeAway };
+  }
+
+  return {
+    home: numberOrNull(fixture.goals?.home),
+    away: numberOrNull(fixture.goals?.away)
+  };
+}
 function mapApiFootballStatus(status) {
   if (["FT", "AET", "PEN"].includes(status)) return "FINISHED";
   if (["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(status)) return "LIVE";

@@ -616,7 +616,7 @@ function MatchCard({ match, prediction, onSaved, onError }) {
       <div className="score-line">
         {match.homeScore !== null && match.awayScore !== null && (
           <strong>
-            Sluttresultat: {match.homeScore}-{match.awayScore}
+            Fulltid (90 min): {match.homeScore}-{match.awayScore}
           </strong>
         )}
         {prediction && <span>{prediction.points} poeng</span>}
@@ -629,6 +629,7 @@ function MatchCard({ match, prediction, onSaved, onError }) {
       )}
 
       <form className="prediction-form" onSubmit={savePrediction}>
+        <p className="hint">Tips gjelder fulltid (90 minutter), ikke ekstraomganger eller straffer.</p>
         <div className="score-inputs">
           <label>
             <span className="score-team-label">
@@ -1084,13 +1085,13 @@ function FriendsPanel() {
 
       <section className="info-section">
         <h3>Hvordan tipper du?</h3>
-        <p>Gå til <strong>Kamper</strong> og velg datoen du vil tippe på. På hvert kampkort skriver du inn hvor mange mål du tror hvert lag scorer.</p>
+        <p>Velg <strong>Kamper</strong> og dato. Pa hvert kampkort skriver du inn stillingen du tror det er etter 90 minutter.</p>
         <ul>
           <li><strong>H</strong> betyr hjemmeseier.</li>
           <li><strong>U</strong> betyr uavgjort.</li>
           <li><strong>B</strong> betyr borteseier.</li>
         </ul>
-        <p>Appen regner automatisk ut H, U eller B basert på resultatet du skriver inn.</p>
+        <p>Appen regner automatisk ut H, U eller B basert pa fulltid-resultatet du skriver inn. Ekstraomganger og straffer teller ikke.</p>
       </section>
 
       <section className="info-section">
@@ -1363,12 +1364,12 @@ function ResultRow({ match, onChanged, onError }) {
       <div>
         <strong>#{match.matchNumber} {match.homeTeam} - {match.awayTeam}</strong>
         <span>
-          Gruppe {match.groupName} - {formatNorwegianKickoff(match)} norsk tid - {match.stadium}{match.city ? `, ${match.city}` : ""} - Status: {match.status}
+          Gruppe {match.groupName} - {formatNorwegianKickoff(match)} norsk tid - {match.stadium}{match.city ? `, ${match.city}` : ""} - Status: {match.status} - Resultat gjelder fulltid (90 min)
         </span>
       </div>
       <input type="number" min="0" max="30" value={homeScore} onChange={(event) => setHomeScore(event.target.value)} />
       <input type="number" min="0" max="30" value={awayScore} onChange={(event) => setAwayScore(event.target.value)} />
-      <button className="secondary-button">Lagre</button>
+      <button className="secondary-button">Lagre fulltid</button>
       <button type="button" className="secondary-button" onClick={reopenMatch}>
         Apne kamp
       </button>
