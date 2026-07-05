@@ -70,6 +70,7 @@
   { matchNumber: 69, group: "J", homeTeam: "Algeria", awayTeam: "Austria", date: "2026-06-27", localTime: "21:00", stadium: "Arrowhead Stadium", city: "Kansas City", stage: "Group Stage" },
   { matchNumber: 70, group: "J", homeTeam: "Jordan", awayTeam: "Argentina", date: "2026-06-27", localTime: "21:00", stadium: "AT&T Stadium", city: "Dallas", stage: "Group Stage" },
   { matchNumber: 71, group: "K", homeTeam: "Colombia", awayTeam: "Portugal", date: "2026-06-27", localTime: "19:30", stadium: "Hard Rock Stadium", city: "Miami", stage: "Group Stage" },
-  { matchNumber: 72, group: "K", homeTeam: "Congo DR", awayTeam: "Uzbekistan", date: "2026-06-27", localTime: "19:30", stadium: "Mercedes-Benz Stadium", city: "Atlanta", stage: "Group Stage" }
+  { matchNumber: 72, group: "K", homeTeam: "Congo DR", awayTeam: "Uzbekistan", date: "2026-06-27", localTime: "19:30", stadium: "Mercedes-Benz Stadium", city: "Atlanta", stage: "Group Stage" },
+  { matchNumber: 93, group: "Knockout", homeTeam: "Portugal", awayTeam: "Spain", date: "2026-07-06", localTime: "14:00", stadium: "AT&T Stadium", city: "Dallas", stage: "Round of 16" }
 ];
 
