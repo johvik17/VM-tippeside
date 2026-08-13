@@ -224,7 +224,7 @@ The frontend uses the Vite base path:
 Build and deploy with the production API URL:
 
 ```powershell
-$env:VITE_API_URL="https://vm-tippeside-api.onrender.com/api"
+$env:VITE_API_URL="https://vm-tippeside.onrender.com/api"
 npm run deploy
 ```
 
@@ -258,7 +258,7 @@ Health check: /api/health
 Health check:
 
 ```text
-https://vm-tippeside-api.onrender.com/api/health
+https://vm-tippeside.onrender.com/api/health
 ```
 
 Expected response:
