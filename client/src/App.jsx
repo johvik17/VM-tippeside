@@ -8,14 +8,15 @@ import {
   Clock3,
   Crown,
   Flame,
+  Home,
   LogOut,
   Medal,
+  Settings,
   ShieldCheck,
   Sparkles,
   TrendingUp,
   Trophy,
-  Users,
-  UserRound
+  Users
 } from "lucide-react";
 import { apiRequest } from "./api.js";
 
@@ -249,114 +250,177 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
-      <Hero user={user} nextMatch={nextMatch} onLogout={logout} />
+    <div className="app-frame">
+      <NavBar view={view} setView={setView} isAdmin={user.role === "ADMIN"} user={user} onLogout={logout} />
 
-      <NavBar view={view} setView={setView} isAdmin={user.role === "ADMIN"} />
-      <div className="live-update-indicator" role="status">
-        <span aria-hidden="true">●</span>
-        Live updates enabled
+      <div className="app-main">
+        <Hero nextMatch={nextMatch} />
+
+        <div className="live-update-indicator" role="status">
+          <span aria-hidden="true" />
+          Live oppdatering
+        </div>
+
+        {message && (
+          <div className="notice" role="status">
+            {message}
+            <button onClick={() => setMessage("")}>Lukk</button>
+          </div>
+        )}
+
+        {loading && <p className="loading-line">Laster VM-data...</p>}
+
+        {view === "matches" && (
+          <MatchOverview
+            matches={matches}
+            predictionsByMatch={predictionsByMatch}
+            onSaved={async () => {
+              setMessage("Tipset er lagret.");
+              await refreshData();
+            }}
+            onError={setMessage}
+          />
+        )}
+        {view === "leaderboard" && <Leaderboard rows={leaderboard} />}
+        {view === "myTips" && <MyTips matches={matches} predictionsByMatch={predictionsByMatch} />}
+        {view === "extraTips" && (
+          <ExtraTipsPage
+            prediction={extraPrediction}
+            result={extraResult}
+            lock={extraLock}
+            publicPredictions={publicExtraPredictions}
+            onSaved={async () => {
+              setMessage("Ekstra tips er lagret.");
+              await refreshData();
+            }}
+            onError={setMessage}
+          />
+        )}
+        {view === "friends" && <FriendsPanel />}
+        {view === "admin" && user.role === "ADMIN" && (
+          <AdminPage matches={matches} extraResult={extraResult} onChanged={refreshData} onError={setMessage} />
+        )}
       </div>
 
-      {message && (
-        <div className="notice" role="status">
-          {message}
-          <button onClick={() => setMessage("")}>Lukk</button>
-        </div>
-      )}
-
-      {loading && <p className="loading-line">Laster VM-data...</p>}
-
-      {view === "matches" && (
-        <MatchOverview
-          matches={matches}
-          predictionsByMatch={predictionsByMatch}
-          onSaved={async () => {
-            setMessage("Tipset er lagret.");
-            await refreshData();
-          }}
-          onError={setMessage}
-        />
-      )}
-      {view === "leaderboard" && <Leaderboard rows={leaderboard} />}
-      {view === "myTips" && <MyTips matches={matches} predictionsByMatch={predictionsByMatch} />}
-      {view === "extraTips" && (
-        <ExtraTipsPage
-          prediction={extraPrediction}
-          result={extraResult}
-          lock={extraLock}
-          publicPredictions={publicExtraPredictions}
-          onSaved={async () => {
-            setMessage("Ekstra tips er lagret.");
-            await refreshData();
-          }}
-          onError={setMessage}
-        />
-      )}
-      {view === "friends" && <FriendsPanel />}
-      {view === "admin" && user.role === "ADMIN" && (
-        <AdminPage matches={matches} extraResult={extraResult} onChanged={refreshData} onError={setMessage} />
-      )}
+      <DashboardAside leaderboard={leaderboard} matches={matches} predictions={predictions} setView={setView} />
     </div>
   );
 }
 
-function Hero({ user, nextMatch, onLogout }) {
+function Hero({ nextMatch }) {
   return (
     <header className="hero">
       <div className="hero-content">
-        <div className="world-cup-mark">
-          <Trophy size={28} />
-        </div>
-        <p className="eyebrow">World Cup 2026</p>
+        <p className="eyebrow">Velkommen til</p>
         <h1>VM 2026 Tippekonkurranse</h1>
         <p className="hero-subtitle">Tipp kampene. Konkurrer med vennene dine.</p>
         <div className="hero-stats">
           <div>
+            <CalendarDays size={22} />
             <span>Neste kamp</span>
-            <strong>{nextMatch ? `${nextMatch.homeTeam} - ${nextMatch.awayTeam}` : "Ingen kamper"}</strong>
+            <strong>{nextMatch ? formatNorwegianKickoff(nextMatch) : "Ingen kamper"}</strong>
           </div>
           <div>
-            <span>Avspark</span>
-            <strong>{nextMatch ? formatNorwegianKickoff(nextMatch) : "-"}</strong>
+            <Clock3 size={22} />
+            <span>Avspark om</span>
+            <strong>{nextMatch ? timeUntilKickoff(nextMatch) : "-"}</strong>
           </div>
         </div>
-      </div>
-      <div className="hero-user">
-        <UserRound size={18} />
-        <span>{user.username}</span>
-        {user.role === "ADMIN" && <strong>Admin</strong>}
-        <button className="icon-button" onClick={onLogout} title="Logg ut">
-          <LogOut size={18} />
-        </button>
       </div>
     </header>
   );
 }
 
-function NavBar({ view, setView, isAdmin }) {
+function NavBar({ view, setView, isAdmin, user, onLogout }) {
   const items = [
-    ["matches", "Kamper", Trophy],
-    ["leaderboard", "Leaderboard", Medal],
+    ["matches", "Oversikt", Home],
+    ["matches", "Kamper", CalendarDays],
     ["myTips", "Mine tips", ClipboardList],
-    ["extraTips", "Ekstra tips", Sparkles],
-    ["friends", "Info", Users]
+    ["leaderboard", "Leaderboard", Trophy],
+    ["friends", "Venner", Users],
+    ["extraTips", "Ekstra tips", Sparkles]
   ];
 
   if (isAdmin) items.push(["admin", "Admin", ShieldCheck]);
 
   return (
-    <nav className="tabs" aria-label="Hovednavigasjon">
-      {items.map(([id, label, Icon]) => (
-        <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>
-          <Icon size={18} />
-          <span>{label}</span>
+    <aside className="sidebar">
+      <div className="brand-block">
+        <div className="world-cup-mark">
+          <Trophy size={31} />
+        </div>
+        <strong>VM 2026</strong>
+        <span>Tippeside</span>
+      </div>
+
+      <nav className="tabs" aria-label="Hovednavigasjon">
+        {items.map(([id, label, Icon], index) => (
+          <button
+            key={`${id}-${label}`}
+            className={(id === "matches" ? index === 0 && view === id : view === id) ? "active" : ""}
+            onClick={() => setView(id)}
+          >
+            <Icon size={22} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="sidebar-account">
+        <div className="user-pill">
+          <span className="table-avatar">{user.username.slice(0, 1).toUpperCase()}</span>
+          <strong>{user.username}</strong>
+          {user.role === "ADMIN" && <span>Admin</span>}
+        </div>
+        <button className="logout-button" onClick={onLogout}>
+          <LogOut size={20} />
+          <span>Logg ut</span>
         </button>
-      ))}
-    </nav>
+      </div>
+    </aside>
   );
 }
 
+function DashboardAside({ leaderboard, matches, predictions, setView }) {
+  const liveCount = matches.filter(isLiveMatch).length;
+  const topRows = leaderboard.slice(0, 5);
+
+  return (
+    <aside className="dashboard-aside">
+      <section className="side-panel">
+        <h2>Topp 5</h2>
+        <div className="top-list">
+          {topRows.length === 0 ? (
+            <p className="muted">Ingen poeng ennå.</p>
+          ) : (
+            topRows.map((row) => (
+              <div className="top-row" key={row.userId}>
+                <span>{row.rank}</span>
+                <span className="table-avatar">{row.username.slice(0, 1).toUpperCase()}</span>
+                <strong>{row.username}</strong>
+                <b>{row.totalPoints}<small> poeng</small></b>
+              </div>
+            ))
+          )}
+        </div>
+        <button className="secondary-button side-action" onClick={() => setView("leaderboard")}>
+          Se full leaderboard
+          <ChevronRight size={18} />
+        </button>
+      </section>
+
+      <section className="side-panel">
+        <h2>Statistikk</h2>
+        <div className="stats-grid">
+          <SummaryItem label="Brukere" value={leaderboard.length} icon={Users} />
+          <SummaryItem label="Kamper" value={matches.length} icon={CalendarDays} />
+          <SummaryItem label="Tips avgitt" value={predictions.length} icon={Settings} />
+          <SummaryItem label="Live nå" value={liveCount} icon={Trophy} />
+        </div>
+      </section>
+    </aside>
+  );
+}
 function readStoredUser() {
   const raw = localStorage.getItem("vmTippeUser");
   if (!raw) return null;
@@ -1442,10 +1506,23 @@ function isLiveMatch(match) {
   return now >= kickoff && now <= kickoff + 2 * 60 * 60 * 1000 && match.status !== "FINISHED";
 }
 
+function timeUntilKickoff(match) {
+  const kickoff = new Date(match.kickoffAtUtc || match.startTime).getTime();
+  const diffMs = kickoff - Date.now();
+  if (diffMs <= 0) return "nå";
+
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  if (days >= 1) return `${days} ${days === 1 ? "dag" : "dager"}`;
+
+  const hours = Math.max(1, Math.ceil(diffMs / (60 * 60 * 1000)));
+  return `${hours} ${hours === 1 ? "time" : "timer"}`;
+}
 function compareMatchesByKickoff(left, right) {
   const leftTime = new Date(left.kickoffAtUtc || left.startTime).getTime();
   const rightTime = new Date(right.kickoffAtUtc || right.startTime).getTime();
   if (leftTime !== rightTime) return leftTime - rightTime;
   return (left.matchNumber ?? 999) - (right.matchNumber ?? 999);
 }
+
+
 
